@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Slitherlink Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBFAF5; --panel:#FFFFFF; --ink:#1A1612; --ink-soft:#37312A;
+    --muted:#7A7163; --faint:#ECE6D9; --line:#DED6C6; --line-strong:#CDC3AF;
+    --accent:#14502E; --accent-2:#1C7A47; --accent-ink:#0E3A21;
+    --gold:#B8893B;
+    --good:#2E7D52; --warn:#9A571B; --bad:#A6362F;
+    --dot:#161108; --loop:#1A1612;
+    --shadow:0 1px 2px rgba(40,32,20,.05), 0 8px 30px rgba(40,32,20,.08);
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:"Hanken Grotesk", system-ui, -apple-system, Segoe UI, sans-serif;
+    background:
+      radial-gradient(1200px 700px at 85% -10%, #FFFDF7 0%, rgba(255,253,247,0) 60%),
+      radial-gradient(900px 600px at -10% 110%, #F4F0E4 0%, rgba(244,240,228,0) 55%),
+      var(--paper);
+    color:var(--ink); -webkit-font-smoothing:antialiased; min-height:100vh;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:28px 24px 64px}
+
+  /* Masthead */
+  header.mast{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap;
+    border-bottom:1.5px solid var(--ink); padding-bottom:14px}
+  .kicker{font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent-2); font-weight:700; margin:0 0 6px}
+  h1{font-family:"Fraunces", Georgia, serif; font-weight:600; font-size:clamp(34px,5vw,52px);
+    line-height:.96; letter-spacing:-.015em; margin:0; color:var(--ink)}
+  h1 em{font-style:italic; color:var(--accent)}
+  .dek{font-family:"Fraunces", Georgia, serif; font-style:italic; font-size:15px; color:var(--muted); margin:8px 0 0; max-width:46ch}
+  .mast-right{display:flex; gap:8px; align-items:center}
+
+  /* Toolbar */
+  .toolbar{display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; margin:18px 0 10px}
+  .group{display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:6px; background:rgba(255,255,255,.55);
+    border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow)}
+  .group .glabel{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    font-weight:700; padding:0 6px 0 4px}
+  .dim{display:flex; align-items:center; gap:5px}
+  .dim label{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:600}
+  input[type="number"]{width:52px; padding:6px 6px; font-family:inherit; font-size:15px; font-weight:600;
+    color:var(--ink); border:1px solid var(--line-strong); border-radius:8px; background:var(--panel); text-align:center}
+  input[type="number"]:focus-visible{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent)}
+
+  button{font-family:inherit; font-size:13.5px; font-weight:600; color:var(--ink-soft);
+    padding:8px 12px; border:1px solid var(--line-strong); border-radius:8px; background:var(--panel);
+    cursor:pointer; transition:transform .08s ease, box-shadow .12s ease, background .12s ease, color .12s ease, border-color .12s ease;
+    display:inline-flex; align-items:center; gap:7px; white-space:nowrap}
+  button:hover{background:#fff; border-color:var(--accent-2); color:var(--accent-ink); transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  button:disabled{opacity:.42; cursor:not-allowed; transform:none; border-color:var(--line); color:var(--muted)}
+  button.primary{background:var(--accent); color:#FBFAF5; border-color:var(--accent)}
+  button.primary:hover{background:var(--accent-2); color:#fff; border-color:var(--accent-2)}
+  button.ghost{border-color:transparent; background:transparent}
+  button.ghost:hover{background:rgba(20,80,46,.07); border-color:transparent}
+  button .ic{width:15px; height:15px; display:inline-block; flex:none}
+  button.icon-only{padding:8px 9px}
+
+  /* Status */
+  .statusbar{display:flex; align-items:center; gap:14px; flex-wrap:wrap; min-height:30px; margin:6px 0 4px}
+  #status{font-size:14px; color:var(--ink-soft); font-weight:500}
+  #status.err{color:var(--bad)} #status.ok{color:var(--accent-2)}
+  .pill{display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:700;
+    letter-spacing:.04em; padding:5px 11px; border-radius:999px; border:1px solid var(--line)}
+  .pill .dotk{width:8px; height:8px; border-radius:50%}
+  .pill.hidden{display:none}
+  .progress{flex:1 1 200px; max-width:320px; height:5px; background:var(--faint); border-radius:99px; overflow:hidden; display:none}
+  .progress.show{display:block}
+  .progress > i{display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .1s linear}
+
+  /* Board */
+  .stage{margin-top:14px; padding:22px; background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); box-shadow:var(--shadow); overflow:auto;
+    background-image:radial-gradient(var(--faint) .5px, transparent .5px); background-size:22px 22px}
+  .boardholder{display:flex; justify-content:center; min-width:min-content}
+  svg.board{touch-action:none; user-select:none; display:block; border-radius:8px;
+    background:#FFFEFB; box-shadow:0 0 0 1px var(--faint)}
+  svg.board .vtx{fill:var(--dot)}
+  svg.board .edge{stroke:var(--loop); stroke-width:6; stroke-linecap:round; opacity:0; transition:opacity .09s ease}
+  svg.board .edge.on{opacity:1}
+  svg.board .hover{stroke:var(--accent-2); stroke-width:6; stroke-linecap:round; opacity:0; pointer-events:none}
+  svg.board .hover.show{opacity:.26}
+  svg.board .clue{font-family:"Hanken Grotesk", system-ui, -apple-system, sans-serif; font-weight:700;
+    fill:var(--ink); text-anchor:middle; dominant-baseline:central; cursor:pointer;
+    font-variant-numeric:tabular-nums; letter-spacing:.01em}
+  svg.board .clue.dim{fill:var(--line-strong); opacity:.0}
+  svg.board .cellhit{fill:transparent}
+
+  /* Help */
+  .help{margin:20px 2px 0; color:var(--muted); font-size:13.5px; line-height:1.6; max-width:74ch}
+  .help b{color:var(--ink-soft); font-weight:600}
+  .help kbd{font-family:inherit; font-size:12px; background:#fff; border:1px solid var(--line-strong);
+    border-bottom-width:2px; border-radius:5px; padding:1px 6px; color:var(--ink-soft); font-weight:600}
+
+  /* Modal */
+  .scrim{position:fixed; inset:0; background:rgba(26,22,18,.42); backdrop-filter:blur(3px);
+    display:none; align-items:flex-start; justify-content:center; padding:40px 20px; z-index:50; overflow:auto}
+  .scrim.show{display:flex}
+  .modal{background:var(--paper); max-width:660px; width:100%; border-radius:16px; border:1px solid var(--line);
+    box-shadow:0 30px 80px rgba(20,16,12,.3); padding:0; overflow:hidden}
+  .modal .mhead{display:flex; justify-content:space-between; align-items:center; padding:20px 24px 16px;
+    border-bottom:1px solid var(--line)}
+  .modal .mhead h2{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:26px; margin:0; letter-spacing:-.01em}
+  .modal .mbody{padding:8px 24px 26px; max-height:64vh; overflow:auto}
+  .modal h3{font-size:15px; font-weight:700; margin:22px 0 4px; color:var(--ink)}
+  .modal p{font-size:14px; line-height:1.62; color:var(--ink-soft); margin:8px 0}
+  .modal .lede{font-family:"Fraunces",Georgia,serif; font-size:16px; line-height:1.55; color:var(--ink); font-style:italic}
+  .entry{padding:16px 0; border-top:1px solid var(--line)}
+  .entry:first-of-type{border-top:none}
+  .entry .date{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .entry.milestone .date{color:var(--gold)}
+  .entry h4{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:19px; margin:3px 0 4px}
+  .tag{display:inline-block; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--gold); border:1px solid var(--gold); border-radius:99px; padding:1px 7px; margin-left:8px; vertical-align:middle}
+  .modal a.close{cursor:pointer}
+
+  @media (max-width:620px){
+    .wrap{padding:18px 14px 48px}
+    .group .glabel{display:none}
+    .help{font-size:13px}
+  }
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important} }
+
+  /* Print */
+  @media print{
+    body{background:#fff}
+    .wrap > *{display:none !important}
+    #printArea{display:block !important}
+  }
+  #printArea{display:none; position:relative}
+  #printArea h2{font-family:"Fraunces",Georgia,serif; font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <p class="kicker">Puzzle workshop</p>
+      <h1>Slitherlink <em>Builder</em></h1>
+      <p class="dek">Draw a loop, let it become a puzzle. Generates a clued, uniquely-solvable Slitherlink in milliseconds.</p>
+    </div>
+    <div class="mast-right">
+      <button class="ghost" id="aboutBtn" aria-haspopup="dialog">About &amp; changelog</button>
+    </div>
+  </header>
+
+  <div class="toolbar" role="toolbar" aria-label="Puzzle controls">
+    <div class="group" aria-label="Grid size">
+      <span class="glabel">Grid</span>
+      <span class="dim"><label for="rows">Rows</label><input id="rows" type="number" min="2" max="18" value="6"></span>
+      <span class="dim"><label for="cols">Cols</label><input id="cols" type="number" min="2" max="18" value="6"></span>
+      <button id="newGrid" title="Start a fresh empty grid">New grid</button>
+    </div>
+
+    <div class="group" aria-label="Loop editing">
+      <span class="glabel">Loop</span>
+      <button id="undo" class="icon-only" title="Undo (⌘Z)" aria-label="Undo">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/></svg></button>
+      <button id="redo" class="icon-only" title="Redo (⇧⌘Z)" aria-label="Redo">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7l5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h1"/></svg></button>
+      <button id="clearLoop" title="Remove all drawn edges">Clear loop</button>
+    </div>
+
+    <div class="group" aria-label="Build puzzle">
+      <span class="glabel">Build</span>
+      <button id="generate" title="Fill every cell with its edge count">Populate numbers</button>
+      <button id="autoPuzzle" class="primary" title="Populate, then thin the clues to a unique puzzle">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4M3 5h4M6 17v4M4 19h4"/><path d="M13 5l3.5 7.5L24 16l-7.5 3.5L13 27"/><path d="M13 5L9.5 12.5 2 16l7.5 3.5L13 27" opacity=".0"/></svg>
+        Create unique puzzle</button>
+      <button id="clearClues" title="Remove all numbers">Clear numbers</button>
+    </div>
+
+    <div class="group" aria-label="Verify">
+      <span class="glabel">Verify</span>
+      <button id="check" title="Confirm the visible clues have exactly one solution">Check unique</button>
+    </div>
+
+    <div class="group" aria-label="Output">
+      <span class="glabel">Output</span>
+      <button id="exportPng" title="Download the puzzle as a PNG image">PNG</button>
+      <button id="printBtn" title="Print or save the puzzle as PDF">Print</button>
+      <button id="saveBtn" title="Save the whole project to a file">Save</button>
+      <button id="loadBtn" title="Open a saved project">Load</button>
+      <input id="loadInput" type="file" accept=".json,application/json" hidden>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span id="status" aria-live="polite">Draw your loop by clicking the grid edges.</span>
+    <span id="diffPill" class="pill hidden"><span class="dotk"></span><span id="diffText"></span></span>
+    <span class="progress" id="progress"><i></i></span>
+  </div>
+
+  <div class="stage">
+    <div class="boardholder">
+      <svg class="board" id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+  <p class="help">
+    <b>Click an edge</b> to add it to your loop — or click-and-drag to paint a line; drag back over it to erase.
+    The loop can’t fork — each dot joins at most two lines. Build one single closed loop, then press <b>Create unique puzzle</b>: it fills every clue, then quietly removes as many as it can while the puzzle still has exactly one solution.
+    After that, <b>click any number</b> to hide or restore it — the difficulty re-reads as you go. Numbers track the loop live if you redraw it. <kbd>⌘Z</kbd> undoes, <kbd>⇧⌘Z</kbd> redoes.
+  </p>
+
+  <!-- Print target -->
+  <div id="printArea"></div>
+</div>
+
+<!-- About / changelog -->
+<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+  <div class="modal">
+    <div class="mhead">
+      <h2 id="aboutTitle">About this builder</h2>
+      <button class="ghost close" id="closeAbout" aria-label="Close">Close ✕</button>
+    </div>
+    <div class="mbody">
+      <p class="lede">A small workshop tool for making Slitherlink puzzles by hand: draw the loop you want, and it works out a clean set of numbers that has your loop as its one and only answer.</p>
+      <h3>How it's made</h3>
+      <p>It's a single HTML file — no install, no account, nothing leaves your machine. The grid is SVG; the hard part, checking that a set of clues has exactly one solution, runs in a background worker so the interface never freezes. That solver does proper Slitherlink deduction (forced edges, vertex parity, no premature little loops) rather than blind trial and error, which is why a 6×6 now takes a few milliseconds instead of the best part of an hour.</p>
+      <h3>The diary</h3>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
+        <h4>Alan’s notes, round one</h4>
+        <p>A page of pencilled notes from the puzzles desk, mostly small and all sensible. The lattice dots are black now, and the clue numbers have swapped the decorative serif for a plainer, more legible face — they’re puzzle furniture, not a headline. Saved files and exported images carry the date in their name, so a library doesn’t collapse into a pile of identical filenames.</p>
+        <p>Two changes go a bit deeper. The loop can no longer fork: a dot will only ever join two lines, so you can’t accidentally draw something that isn’t a valid path. And once numbers are on the board they track the loop live as you redraw it — change the shape and the clues follow — while the difficulty re-reads itself every time you hide or restore a number by hand.</p>
+      </div>
+
+      <div class="entry milestone">
+        <div class="date">23 June 2026 <span class="tag">Milestone</span></div>
+        <h4>A rebuild, and the end of the hour-long wait</h4>
+        <p>The first version worked but was painfully slow — a 6×6 could take an hour in Safari, and anything larger was hopeless. The culprit wasn't the browser; it was the solver, which brute-forced every edge with almost no deduction and re-scanned the whole grid millions of times over.</p>
+        <p>This rebuild replaces it with a real propagation solver: it deduces the forced moves a human would, uses a union-find to reject loops that close too early, and runs off the main thread. Before trusting it, it was checked against an exhaustive brute force on thousands of small grids — and it caught a genuine bug, where a loop with a stray tail was being counted as valid. Same buttons as before, but a 6×6 is now instant and 10×10 is comfortable.</p>
+      </div>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
+        <h4>The niceties</h4>
+        <p>Added the things that make it pleasant rather than merely fast: undo and redo while drawing, a rough difficulty read on the finished puzzle, save and load so you can keep a library, and a clean print layout for the page or a PDF. Drawing now supports click-and-drag, so laying down a long edge is one gesture, not twenty clicks.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ---------------- Solver worker (inline) ---------------- */
+  const workerCode = `
+  'use strict';
+  function buildModel(R,C){
+    const VW=C+1, vId=(r,c)=>r*VW+c;
+    const Hrows=R+1,Hcols=C,Vrows=R,Vcols=C+1;
+    let id=0;
+    const edgeV1=[],edgeV2=[],edgeCellA=[],edgeCellB=[];
+    const cellEdges=Array.from({length:R*C},()=>[]);
+    const NV=(R+1)*VW;
+    const vertEdges=Array.from({length:NV},()=>[]);
+    for(let r=0;r<Hrows;r++)for(let c=0;c<Hcols;c++){const e=id++;
+      edgeV1[e]=vId(r,c);edgeV2[e]=vId(r,c+1);
+      edgeCellA[e]=(r<R)?(r*C+c):-1; edgeCellB[e]=(r>0)?((r-1)*C+c):-1;
+      vertEdges[vId(r,c)].push(e);vertEdges[vId(r,c+1)].push(e);
+      if(r<R)cellEdges[r*C+c].push(e); if(r>0)cellEdges[(r-1)*C+c].push(e);}
+    for(let r=0;r<Vrows;r++)for(let c=0;c<Vcols;c++){const e=id++;
+      edgeV1[e]=vId(r,c);edgeV2[e]=vId(r+1,c);
+      edgeCellA[e]=(c<C)?(r*C+c):-1; edgeCellB[e]=(c>0)?(r*C+(c-1)):-1;
+      vertEdges[vId(r,c)].push(e);vertEdges[vId(r+1,c)].push(e);
+      if(c<C)cellEdges[r*C+c].push(e); if(c>0)cellEdges[r*C+(c-1)].push(e);}
+    return {E:id,NV,edgeV1,edgeV2,edgeCellA,edgeCellB,cellEdges,vertEdges};
+  }
+  function makeSolver(R,C){
+    const m=buildModel(R,C);
+    const {E,NV,edgeV1,edgeV2,edgeCellA,edgeCellB,cellEdges,vertEdges}=m;
+    const state=new Int8Array(E),parent=new Int32Array(NV),rank=new Int8Array(NV),compE=new Int32Array(NV);
+    const inC=new Uint8Array(R*C),inV=new Uint8Array(NV);
+    let qCell=[],qVert=[],clue=new Int8Array(R*C);
+    const trail=[],unionTrail=[];
+    let onCount=0,solutions=0,limit=2,branchDecisions=0,gFail=false,gDone=false;
+    function find(x){while(parent[x]!==x)x=parent[x];return x;}
+    function validSingleLoop(){
+      for(let v=0;v<NV;v++){const a=vertEdges[v];let d=0;for(let i=0;i<a.length;i++)if(state[a[i]]===1)d++;if(d!==0&&d!==2)return false;}
+      for(let cell=0;cell<R*C;cell++){const k=clue[cell];if(k<0)continue;let on=0;const a=cellEdges[cell];for(let i=0;i<a.length;i++)if(state[a[i]]===1)on++;if(on!==k)return false;}
+      return true;
+    }
+    function pushCell(c){if(c<0)return;if(!inC[c]){inC[c]=1;qCell.push(c);}}
+    function pushVert(v){if(!inV[v]){inV[v]=1;qVert.push(v);}}
+    function setEdge(e,val){const s=state[e];if(s===val)return;if(s!==0){gFail=true;return;}state[e]=val;trail.push(e);
+      if(val===1){onCount++;const a=find(edgeV1[e]),b=find(edgeV2[e]);
+        if(a===b){const loopEdges=compE[a]+1;if(loopEdges!==onCount){gDone=true;return;}if(validSingleLoop())solutions++;gDone=true;return;}
+        let ra=a,rb=b;if(rank[ra]<rank[rb]){const t=ra;ra=rb;rb=t;}parent[rb]=ra;const dE=compE[rb]+1;compE[ra]+=dE;const ri=rank[ra]===rank[rb];if(ri)rank[ra]++;unionTrail.push(rb|(ra<<12)|(ri?(1<<24):0));}
+      pushCell(edgeCellA[e]);pushCell(edgeCellB[e]);pushVert(edgeV1[e]);pushVert(edgeV2[e]);}
+    function applyCell(cell){const k=clue[cell];if(k<0)return;const a=cellEdges[cell];let on=0,unk=0;
+      for(let i=0;i<a.length;i++){const s=state[a[i]];if(s===1)on++;else if(s===0)unk++;}
+      if(on>k){gFail=true;return;}if(on+unk<k){gFail=true;return;}if(unk===0)return;
+      if(on===k){for(let i=0;i<a.length&&!gFail&&!gDone;i++)if(state[a[i]]===0)setEdge(a[i],2);}
+      else if(on+unk===k){for(let i=0;i<a.length&&!gFail&&!gDone;i++)if(state[a[i]]===0)setEdge(a[i],1);}}
+    function applyVert(v){const a=vertEdges[v];let on=0,unk=0,lu=-1;
+      for(let i=0;i<a.length;i++){const s=state[a[i]];if(s===1)on++;else if(s===0){unk++;lu=a[i];}}
+      if(on>2){gFail=true;return;}
+      if(on===2){for(let i=0;i<a.length&&!gFail&&!gDone;i++)if(state[a[i]]===0)setEdge(a[i],2);}
+      else if(on===1){if(unk===0){gFail=true;return;}if(unk===1)setEdge(lu,1);}
+      else{if(unk===1)setEdge(lu,2);}}
+    function propagate(){while(true){if(gFail||gDone)return;
+      if(qCell.length){const c=qCell.pop();inC[c]=0;applyCell(c);continue;}
+      if(qVert.length){const v=qVert.pop();inV[v]=0;applyVert(v);continue;}break;}}
+    function clearQueues(){for(let i=0;i<qCell.length;i++)inC[qCell[i]]=0;for(let i=0;i<qVert.length;i++)inV[qVert[i]]=0;qCell.length=0;qVert.length=0;}
+    function undo(em,um,om){while(trail.length>em)state[trail.pop()]=0;while(unionTrail.length>um){const enc=unionTrail.pop();const rb=enc&0xfff,ra=(enc>>12)&0xfff,ri=(enc>>24)&1;compE[ra]-=compE[rb]+1;parent[rb]=rb;if(ri)rank[ra]--;}onCount=om;}
+    function vertHasOn(v){const a=vertEdges[v];for(let i=0;i<a.length;i++)if(state[a[i]]===1)return true;return false;}
+    function chooseEdge(){let best=-1,bs=-1;for(let e=0;e<E;e++){if(state[e]!==0)continue;let sc=0;const ca=edgeCellA[e],cb=edgeCellB[e];if(ca>=0&&clue[ca]>=0)sc+=4;if(cb>=0&&clue[cb]>=0)sc+=4;if(vertHasOn(edgeV1[e]))sc+=2;if(vertHasOn(edgeV2[e]))sc+=2;if(sc>bs){bs=sc;best=e;if(sc>=12)break;}}return best;}
+    function dfs(){if(solutions>=limit)return;const e=chooseEdge();if(e===-1)return;
+      for(let vi=0;vi<2;vi++){const val=vi===0?1:2;const em=trail.length,um=unionTrail.length,om=onCount;
+        gFail=false;gDone=false;branchDecisions++;setEdge(e,val);
+        if(!gFail&&!gDone)propagate();if(!gFail&&!gDone)dfs();clearQueues();undo(em,um,om);if(solutions>=limit)return;}}
+    function count(clueList,lim){limit=lim;state.fill(0);
+      for(let i=0;i<NV;i++){parent[i]=i;rank[i]=0;compE[i]=0;}
+      clue.fill(-1);for(const q of clueList)clue[q.cell]=q.n;
+      trail.length=0;unionTrail.length=0;onCount=0;solutions=0;branchDecisions=0;gFail=false;gDone=false;clearQueues();
+      for(const q of clueList)pushCell(q.cell);propagate();
+      if(gFail)return {count:0,branches:branchDecisions};
+      if(!gDone)dfs();return {count:solutions,branches:branchDecisions};}
+    return {count};
+  }
+  let cache={key:'',solver:null};
+  function solverFor(R,C){const k=R+'x'+C;if(cache.key!==k){cache={key:k,solver:makeSolver(R,C)};}return cache.solver;}
+
+  onmessage=function(ev){
+    const d=ev.data;
+    if(d.type==='check'){
+      const s=solverFor(d.R,d.C);
+      const r=s.count(d.clues,2);
+      postMessage({id:d.id,type:'result',count:r.count,branches:r.branches});
+    } else if(d.type==='auto'){
+      const s=solverFor(d.R,d.C);
+      const N=d.R*d.C;
+      const full=d.fullClues;
+      const fr=s.count(full,2);
+      if(fr.count!==1){postMessage({id:d.id,type:'autofail',count:fr.count});return;}
+      const visible=new Array(N).fill(true);
+      const order=d.order;
+      let removed=0;
+      const step=Math.max(1,Math.floor(order.length/40));
+      for(let k=0;k<order.length;k++){
+        const cell=order[k];
+        visible[cell]=false;
+        const cl=[];for(let i=0;i<N;i++)if(visible[i])cl.push(full[i]);
+        const r=s.count(cl,2);
+        if(r.count===1)removed++; else visible[cell]=true;
+        if(k%step===0||k===order.length-1) postMessage({id:d.id,type:'progress',k:k+1,total:order.length,removed});
+      }
+      const finalClues=[];for(let i=0;i<N;i++)if(visible[i])finalClues.push(full[i]);
+      const diff=s.count(finalClues,2);
+      postMessage({id:d.id,type:'autodone',visible,removed,remaining:finalClues.length,branches:diff.branches});
+    }
+  };
+  `;
+  const worker = new Worker(URL.createObjectURL(new Blob([workerCode], {type:'application/javascript'})));
+  let reqId = 0;
+  const pending = new Map();
+  worker.onmessage = (ev) => {
+    const d = ev.data;
+    const h = pending.get(d.id);
+    if (h) h(d);
+  };
+  function ask(msg, onMsg){ const id = ++reqId; pending.set(id, onMsg); worker.postMessage({...msg, id}); return id; }
+
+  /* ---------------- Geometry & state ---------------- */
+  const CELL = 46, PAD = 42, DOT = 3.1, HIT = 11;
+  const board = document.getElementById('board');
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('status');
+
+  let R = 6, C = 6;
+  let hEdges, vEdges, fullClues, visibleClues;
+  let hLine = [], vLine = [], clueEl = [];
+  let undoStack = [], redoStack = [];
+  let busy = false;
+  let liveNumbers = false;        // once clues exist, they track the loop as it's redrawn
+  let evalTimer = null, evalToken = 0;
+
+  const vx = (c) => PAD + c * CELL;
+  const vy = (r) => PAD + r * CELL;
+  const make2D = (a, b, val) => Array.from({length:a}, () => Array(b).fill(val));
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  const today = () => { const d = new Date(); const p = (n)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+
+  function setStatus(s, cls){ statusEl.textContent = s; statusEl.className = cls || ''; }
+
+  /* ---------------- Build grid ---------------- */
+  function newGrid(){
+    R = clamp(+$('rows').value || 6, 2, 18);
+    C = clamp(+$('cols').value || 6, 2, 18);
+    $('rows').value = R; $('cols').value = C;
+    hEdges = make2D(R+1, C, false);
+    vEdges = make2D(R, C+1, false);
+    fullClues = make2D(R, C, null);
+    visibleClues = make2D(R, C, false);
+    undoStack = []; redoStack = [];
+    liveNumbers = false;
+    buildBoard();
+    hideDiff();
+    setStatus('Draw your loop by clicking the grid edges.');
+    refreshUndo();
+  }
+
+  function buildBoard(){
+    const W = PAD*2 + C*CELL, H = PAD*2 + R*CELL;
+    board.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    board.setAttribute('width', W); board.setAttribute('height', H);
+    while (board.firstChild) board.removeChild(board.firstChild);
+
+    const gHover = el('rect'); // placeholder removed; create groups
+    const edgeG = el('g'), dotG = el('g'), clueG = el('g');
+    board.appendChild(edgeG); board.appendChild(dotG); board.appendChild(clueG);
+
+    // hover highlight
+    const hover = el('line'); hover.setAttribute('class','hover'); board.appendChild(hover);
+    board._hover = hover;
+
+    // edges
+    hLine = []; vLine = [];
+    for (let r=0; r<=R; r++){ hLine[r]=[]; for (let c=0; c<C; c++){
+      const ln = el('line'); ln.setAttribute('class','edge');
+      ln.setAttribute('x1',vx(c)); ln.setAttribute('y1',vy(r));
+      ln.setAttribute('x2',vx(c+1)); ln.setAttribute('y2',vy(r));
+      edgeG.appendChild(ln); hLine[r][c]=ln;
+    }}
+    for (let r=0; r<R; r++){ vLine[r]=[]; for (let c=0; c<=C; c++){
+      const ln = el('line'); ln.setAttribute('class','edge');
+      ln.setAttribute('x1',vx(c)); ln.setAttribute('y1',vy(r));
+      ln.setAttribute('x2',vx(c)); ln.setAttribute('y2',vy(r+1));
+      edgeG.appendChild(ln); vLine[r][c]=ln;
+    }}
+
+    // dots
+    for (let r=0; r<=R; r++) for (let c=0; c<=C; c++){
+      const d = el('circle'); d.setAttribute('class','vtx');
+      d.setAttribute('cx',vx(c)); d.setAttribute('cy',vy(r)); d.setAttribute('r',DOT);
+      dotG.appendChild(d);
+    }
+
+    // clue texts
+    clueEl = [];
+    const fs = Math.floor(CELL*0.46);
+    for (let r=0; r<R; r++){ clueEl[r]=[]; for (let c=0; c<C; c++){
+      const t = el('text'); t.setAttribute('class','clue');
+      t.setAttribute('x',vx(c+0.5)); t.setAttribute('y',vy(r+0.5));
+      t.setAttribute('font-size',fs);
+      clueG.appendChild(t); clueEl[r][c]=t;
+    }}
+    render();
+  }
+  function el(name){ return document.createElementNS(SVGNS, name); }
+
+  /* ---------------- Render ---------------- */
+  function render(){
+    for (let r=0; r<=R; r++) for (let c=0; c<C; c++) hLine[r][c].classList.toggle('on', hEdges[r][c]);
+    for (let r=0; r<R; r++) for (let c=0; c<=C; c++) vLine[r][c].classList.toggle('on', vEdges[r][c]);
+    for (let r=0; r<R; r++) for (let c=0; c<C; c++){
+      const t = clueEl[r][c];
+      if (visibleClues[r][c] && fullClues[r][c] !== null){ t.textContent = fullClues[r][c]; t.style.opacity = 1; }
+      else { t.textContent = ''; t.style.opacity = 0; }
+    }
+  }
+
+  /* ---------------- Undo / redo ---------------- */
+  function snapshot(){
+    undoStack.push(serialize());
+    if (undoStack.length > 120) undoStack.shift();
+    redoStack = [];
+    refreshUndo();
+  }
+  function serialize(){
+    return { R, C,
+      h: hEdges.map(row => row.slice()),
+      v: vEdges.map(row => row.slice()),
+      f: fullClues.map(row => row.slice()),
+      s: visibleClues.map(row => row.slice()) };
+  }
+  function restore(st){
+    R = st.R; C = st.C; $('rows').value = R; $('cols').value = C;
+    hEdges = st.h.map(row => row.slice());
+    vEdges = st.v.map(row => row.slice());
+    fullClues = st.f.map(row => row.slice());
+    visibleClues = st.s.map(row => row.slice());
+    buildBoard();
+  }
+  function doUndo(){ if (!undoStack.length || busy) return; redoStack.push(serialize()); restore(undoStack.pop()); refreshUndo(); hideDiff(); setStatus('Undone.'); }
+  function doRedo(){ if (!redoStack.length || busy) return; undoStack.push(serialize()); restore(redoStack.pop()); refreshUndo(); hideDiff(); setStatus('Redone.'); }
+  function refreshUndo(){ $('undo').disabled = busy || !undoStack.length; $('redo').disabled = busy || !redoStack.length; }
+
+  /* ---------------- Pointer interaction ---------------- */
+  function clientToSvg(ev){
+    const pt = board.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    const m = board.getScreenCTM().inverse();
+    const p = pt.matrixTransform(m);
+    return { x: p.x, y: p.y };
+  }
+  function locate(x, y){
+    const cF = (x - PAD) / CELL, rF = (y - PAD) / CELL;
+    const hr = Math.round(rF), hc = Math.floor(cF);
+    if (hr>=0 && hr<=R && hc>=0 && hc<C && Math.abs(y-vy(hr))<=HIT && cF>=hc && cF<=hc+1) return {kind:'h', r:hr, c:hc};
+    const vc = Math.round(cF), vr = Math.floor(rF);
+    if (vr>=0 && vr<R && vc>=0 && vc<=C && Math.abs(x-vx(vc))<=HIT && rF>=vr && rF<=vr+1) return {kind:'v', r:vr, c:vc};
+    const cr = Math.floor(rF), cc = Math.floor(cF);
+    if (cr>=0 && cr<R && cc>=0 && cc<C) return {kind:'cell', r:cr, c:cc};
+    return null;
+  }
+  function edgeVal(loc){ return loc.kind==='h' ? hEdges[loc.r][loc.c] : vEdges[loc.r][loc.c]; }
+  function setEdgeVal(loc, val){
+    if (loc.kind==='h') hEdges[loc.r][loc.c] = val; else vEdges[loc.r][loc.c] = val;
+  }
+  // how many drawn edges meet at vertex (r,c)
+  function vertexDegree(r, c){
+    let d = 0;
+    if (c>0 && hEdges[r][c-1]) d++;
+    if (c<C && hEdges[r][c]) d++;
+    if (r>0 && vEdges[r-1][c]) d++;
+    if (r<R && vEdges[r][c]) d++;
+    return d;
+  }
+  // #6: adding this edge must not give either endpoint a third line (a fork)
+  function wouldFork(loc){
+    const a = (loc.kind==='h') ? [loc.r, loc.c]   : [loc.r, loc.c];
+    const b = (loc.kind==='h') ? [loc.r, loc.c+1] : [loc.r+1, loc.c];
+    return vertexDegree(a[0],a[1]) >= 2 || vertexDegree(b[0],b[1]) >= 2;
+  }
+  // #7: when numbers are live, keep them matching the loop as it's redrawn
+  function recomputeLiveNumbers(){
+    for (let r=0; r<R; r++) for (let c=0; c<C; c++){
+      const n = (hEdges[r][c]?1:0) + (hEdges[r+1][c]?1:0) + (vEdges[r][c]?1:0) + (vEdges[r][c+1]?1:0);
+      if (fullClues[r][c] !== n){ fullClues[r][c] = n; visibleClues[r][c] = true; }
+    }
+  }
+  function afterLoopEdit(){
+    if (liveNumbers) recomputeLiveNumbers();
+    render();
+    hideDiff();   // the puzzle changed; difficulty is recomputed once the loop is a valid single loop again
+  }
+  // #3: re-check uniqueness + difficulty live whenever the shown clues change
+  function scheduleEvaluate(){ clearTimeout(evalTimer); evalTimer = setTimeout(evaluateNow, 160); }
+  function evaluateNow(){
+    if (busy) return;
+    const clues = currentClueList();
+    if (!clues.length){ hideDiff(); return; }
+    const token = ++evalToken;
+    ask({type:'check', R, C, clues}, (d) => {
+      if (token !== evalToken) return;   // a newer edit superseded this one
+      if (d.count === 1){ showDiff(gradeDifficulty(d.branches, R*C, clues.length)); setStatus('Unique solution.', 'ok'); }
+      else if (d.count === 0){ hideDiff(); setStatus('No solution with the current numbers.', 'err'); }
+      else { hideDiff(); setStatus('Multiple solutions — not unique yet.', 'err'); }
+    });
+  }
+
+  let painting = false, paintVal = false, lastKey = '';
+  board.addEventListener('pointerdown', (ev) => {
+    if (busy) return;
+    const {x,y} = clientToSvg(ev);
+    const loc = locate(x,y);
+    if (!loc) return;
+    if (loc.kind === 'cell'){
+      if (fullClues[loc.r][loc.c] !== null){
+        snapshot();
+        visibleClues[loc.r][loc.c] = !visibleClues[loc.r][loc.c];
+        render();
+        scheduleEvaluate();   // #3: difficulty/uniqueness updates as clues are hidden or restored
+      }
+      return;
+    }
+    // edge: begin paint stroke
+    const adding = !edgeVal(loc);
+    if (adding && wouldFork(loc)){
+      setStatus('Each dot joins at most two lines — that would fork the loop.', 'err');
+      return;
+    }
+    snapshot();
+    paintVal = adding;
+    setEdgeVal(loc, paintVal);
+    painting = true; lastKey = loc.kind+loc.r+'_'+loc.c;
+    board.setPointerCapture(ev.pointerId);
+    afterLoopEdit();
+    board._hover.classList.remove('show');
+  });
+  board.addEventListener('pointermove', (ev) => {
+    const {x,y} = clientToSvg(ev);
+    const loc = locate(x,y);
+    if (painting){
+      if (loc && (loc.kind==='h' || loc.kind==='v')){
+        const key = loc.kind+loc.r+'_'+loc.c;
+        if (key !== lastKey){
+          lastKey = key;
+          if (edgeVal(loc) !== paintVal){
+            // when painting a line on, skip edges that would fork; erasing is always allowed
+            if (paintVal && wouldFork(loc)) { /* skip */ }
+            else { setEdgeVal(loc, paintVal); afterLoopEdit(); }
+          }
+        }
+      }
+      return;
+    }
+    // hover preview
+    const hv = board._hover;
+    if (loc && (loc.kind==='h' || loc.kind==='v') && !busy){
+      if (loc.kind==='h'){ hv.setAttribute('x1',vx(loc.c)); hv.setAttribute('y1',vy(loc.r)); hv.setAttribute('x2',vx(loc.c+1)); hv.setAttribute('y2',vy(loc.r)); }
+      else { hv.setAttribute('x1',vx(loc.c)); hv.setAttribute('y1',vy(loc.r)); hv.setAttribute('x2',vx(loc.c)); hv.setAttribute('y2',vy(loc.r+1)); }
+      hv.classList.add('show');
+    } else hv.classList.remove('show');
+  });
+  function endPaint(ev){
+    if (painting){
+      painting=false; lastKey='';
+      try{ board.releasePointerCapture(ev.pointerId);}catch(e){}
+      if (liveNumbers && drawnLoopIsSingleLoop()) scheduleEvaluate();
+    }
+  }
+  board.addEventListener('pointerup', endPaint);
+  board.addEventListener('pointercancel', endPaint);
+  board.addEventListener('pointerleave', () => board._hover.classList.remove('show'));
+
+  /* ---------------- Clues from loop ---------------- */
+  function currentClueList(){
+    const out = [];
+    for (let r=0; r<R; r++) for (let c=0; c<C; c++)
+      if (visibleClues[r][c] && fullClues[r][c] !== null) out.push({ cell: r*C+c, n: fullClues[r][c] });
+    return out;
+  }
+  function fullClueList(){
+    const out = [];
+    for (let r=0; r<R; r++) for (let c=0; c<C; c++) out.push({ cell: r*C+c, n: fullClues[r][c] });
+    return out;
+  }
+  function populateClues(msg){
+    snapshot();
+    for (let r=0; r<R; r++) for (let c=0; c<C; c++){
+      fullClues[r][c] = (hEdges[r][c]?1:0) + (hEdges[r+1][c]?1:0) + (vEdges[r][c]?1:0) + (vEdges[r][c+1]?1:0);
+      visibleClues[r][c] = true;
+    }
+    liveNumbers = true;
+    render();
+    if (msg !== false){
+      setStatus(msg || 'All numbers populated. Click a number to hide it.');
+      scheduleEvaluate();   // show the difficulty of the full-clue puzzle
+    }
+  }
+
+  function drawnLoopIsSingleLoop(){
+    const NV = (R+1)*(C+1);
+    const vId = (r,c) => r*(C+1)+c;
+    const deg = new Array(NV).fill(0);
+    const adj = Array.from({length:NV}, () => []);
+    let edges = 0;
+    for (let r=0; r<=R; r++) for (let c=0; c<C; c++) if (hEdges[r][c]){
+      deg[vId(r,c)]++; deg[vId(r,c+1)]++; adj[vId(r,c)].push(vId(r,c+1)); adj[vId(r,c+1)].push(vId(r,c)); edges++;
+    }
+    for (let r=0; r<R; r++) for (let c=0; c<=C; c++) if (vEdges[r][c]){
+      deg[vId(r,c)]++; deg[vId(r+1,c)]++; adj[vId(r,c)].push(vId(r+1,c)); adj[vId(r+1,c)].push(vId(r,c)); edges++;
+    }
+    let start = -1, used = 0;
+    for (let v=0; v<NV; v++){ if (deg[v]!==0 && deg[v]!==2) return false; if (deg[v]===2){ used++; if (start<0) start=v; } }
+    if (start < 0) return false;
+    const seen = new Set(); const stack = [start];
+    while (stack.length){ const v = stack.pop(); if (seen.has(v)) continue; seen.add(v); for (const n of adj[v]) stack.push(n); }
+    return seen.size === used;
+  }
+
+  /* ---------------- Busy / disable ---------------- */
+  const BTN_IDS = ['newGrid','generate','autoPuzzle','check','exportPng','printBtn','saveBtn','loadBtn','clearLoop','clearClues'];
+  function setBusy(b){ busy = b; for (const id of BTN_IDS) $(id).disabled = b; refreshUndo(); $('rows').disabled=b; $('cols').disabled=b; }
+
+  /* ---------------- Actions ---------------- */
+  function checkUnique(){
+    const clues = currentClueList();
+    if (!clues.length){ setStatus('No numbers are showing — nothing to check.', 'err'); return; }
+    setBusy(true); setStatus('Checking for a unique solution…');
+    ask({type:'check', R, C, clues}, (d) => {
+      setBusy(false);
+      if (d.count === 0) setStatus('No solution — these numbers can’t be satisfied.', 'err');
+      else if (d.count === 1) setStatus('Unique solution. This is a valid puzzle.', 'ok');
+      else setStatus('Multiple solutions — not yet a unique puzzle.', 'err');
+    });
+  }
+
+  function shuffle(a){ for (let i=a.length-1; i>0; i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  function autoCreate(){
+    if (!drawnLoopIsSingleLoop()){
+      setStatus('The drawing isn’t one single closed loop yet — fix it, then try again.', 'err');
+      return;
+    }
+    populateClues(false);
+    const full = fullClueList();
+    const order = shuffle(Array.from({length:R*C}, (_,i)=>i));
+    setBusy(true); showProgress(0);
+    setStatus('Filling clues and checking the full set is unique…');
+    ask({type:'auto', R, C, fullClues: full, order}, (d) => {
+      if (d.type === 'autofail'){
+        setBusy(false); hideProgress();
+        setStatus(d.count === 0 ? 'The full set of clues has no solution — the loop may be invalid.'
+          : 'Even with every clue, the loop isn’t pinned to a single solution, so I can’t safely thin it.', 'err');
+        return;
+      }
+      if (d.type === 'progress'){
+        showProgress(d.k / d.total);
+        setStatus(`Thinning clues — ${d.k}/${d.total} tested, ${d.removed} removed so far…`);
+        return;
+      }
+      if (d.type === 'autodone'){
+        for (let i=0;i<d.visible.length;i++){ const r=Math.floor(i/C), c=i%C; visibleClues[r][c] = d.visible[i]; }
+        render(); setBusy(false); hideProgress();
+        const grade = gradeDifficulty(d.branches, R*C, d.remaining);
+        showDiff(grade);
+        setStatus(`Done — a unique puzzle with ${d.remaining} clues (${d.removed} removed).`, 'ok');
+      }
+    });
+  }
+
+  /* ---------------- Difficulty ---------------- */
+  function gradeDifficulty(branches, cells, remaining){
+    // branches = search steps needed to confirm uniqueness; 0 means pure logic.
+    let label, color, note;
+    if (branches === 0){ label='Gentle'; color='var(--good)'; note='solvable by pure deduction'; }
+    else if (branches <= 24){ label='Easy'; color='var(--good)'; note='a little guesswork'; }
+    else if (branches <= 120){ label='Moderate'; color='var(--accent-2)'; note='some deduction needed'; }
+    else if (branches <= 700){ label='Tricky'; color='var(--warn)'; note='careful reasoning'; }
+    else { label='Fiendish'; color='var(--bad)'; note='deep deduction'; }
+    return { label, color, note, branches };
+  }
+  function showDiff(g){
+    const p = $('diffPill'); p.classList.remove('hidden');
+    p.querySelector('.dotk').style.background = g.color;
+    $('diffText').textContent = `Difficulty: ${g.label} · ${g.note}`;
+    p.style.color = g.color; p.style.borderColor = g.color;
+  }
+  function hideDiff(){ $('diffPill').classList.add('hidden'); }
+
+  /* ---------------- Progress ---------------- */
+  function showProgress(frac){ const p=$('progress'); p.classList.add('show'); p.querySelector('i').style.width = Math.round(frac*100)+'%'; }
+  function hideProgress(){ const p=$('progress'); p.classList.remove('show'); p.querySelector('i').style.width='0%'; }
+
+  /* ---------------- Clear ---------------- */
+  function clearLoop(){
+    snapshot();
+    hEdges = make2D(R+1,C,false); vEdges = make2D(R,C+1,false);
+    if (liveNumbers){ fullClues = make2D(R,C,null); visibleClues = make2D(R,C,false); liveNumbers = false; }
+    render(); hideDiff(); setStatus('Loop cleared.');
+  }
+  function clearClues(){ snapshot(); fullClues = make2D(R,C,null); visibleClues = make2D(R,C,false); liveNumbers = false; render(); hideDiff(); setStatus('Numbers cleared.'); }
+
+  /* ---------------- Export SVG (puzzle / solution) ---------------- */
+  function buildSVGString({loop=false, forPrint=false} = {}){
+    const W = PAD*2 + C*CELL, H = PAD*2 + R*CELL;
+    const ink = '#1A1612', dot = '#161108';
+    const fs = Math.floor(CELL*0.46);
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`;
+    s += `<rect width="${W}" height="${H}" fill="#ffffff"/>`;
+    if (loop){
+      s += `<g stroke="${ink}" stroke-width="6" stroke-linecap="round">`;
+      for (let r=0;r<=R;r++) for (let c=0;c<C;c++) if (hEdges[r][c]) s+=`<line x1="${vx(c)}" y1="${vy(r)}" x2="${vx(c+1)}" y2="${vy(r)}"/>`;
+      for (let r=0;r<R;r++) for (let c=0;c<=C;c++) if (vEdges[r][c]) s+=`<line x1="${vx(c)}" y1="${vy(r)}" x2="${vx(c)}" y2="${vy(r+1)}"/>`;
+      s += `</g>`;
+    }
+    s += `<g fill="${dot}">`;
+    for (let r=0;r<=R;r++) for (let c=0;c<=C;c++) s+=`<circle cx="${vx(c)}" cy="${vy(r)}" r="${DOT}"/>`;
+    s += `</g>`;
+    s += `<g fill="${ink}" font-family="Hanken Grotesk, system-ui, sans-serif" font-weight="700" font-size="${fs}" text-anchor="middle">`;
+    for (let r=0;r<R;r++) for (let c=0;c<C;c++) if (visibleClues[r][c] && fullClues[r][c]!==null)
+      s+=`<text x="${vx(c+0.5)}" y="${vy(r+0.5)}" dominant-baseline="central">${fullClues[r][c]}</text>`;
+    s += `</g></svg>`;
+    return s;
+  }
+
+  function exportPng(){
+    const svg = buildSVGString({loop:false});
+    const scale = 2;
+    const W = PAD*2 + C*CELL, H = PAD*2 + R*CELL;
+    const img = new Image();
+    const blob = new Blob([svg], {type:'image/svg+xml'});
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = W*scale; cv.height = H*scale;
+      const cx = cv.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0,0,cv.width,cv.height);
+      cx.drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      const a = document.createElement('a');
+      a.download = `slitherlink_${R}x${C}_${today()}.png`;
+      a.href = cv.toDataURL('image/png');
+      a.click();
+      setStatus('PNG exported.', 'ok');
+    };
+    img.onerror = () => setStatus('Couldn’t render the PNG.', 'err');
+    img.src = url;
+  }
+
+  function printPuzzle(){
+    const area = $('printArea');
+    area.innerHTML = `<h2 style="text-align:center;margin:0 0 14px;font-size:22px">Slitherlink · ${R}×${C}</h2>
+      <div style="display:flex;justify-content:center">${buildSVGString({loop:false, forPrint:true})}</div>`;
+    window.print();
+  }
+
+  /* ---------------- Save / load ---------------- */
+  function saveProject(){
+    const data = { app:'slitherlink-builder', v:1, saved:today(), R, C,
+      hEdges, vEdges, fullClues, visibleClues };
+    const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.download = `slitherlink_${R}x${C}_${today()}.json`;
+    a.href = URL.createObjectURL(blob); a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    setStatus('Project saved.', 'ok');
+  }
+  function loadProject(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const d = JSON.parse(reader.result);
+        if (d.app !== 'slitherlink-builder' || !d.R || !d.C) throw new Error('bad');
+        snapshot();
+        R = d.R; C = d.C; $('rows').value=R; $('cols').value=C;
+        hEdges = d.hEdges; vEdges = d.vEdges; fullClues = d.fullClues; visibleClues = d.visibleClues;
+        liveNumbers = fullClues.some(row => row.some(v => v !== null));
+        buildBoard(); hideDiff(); setStatus('Project loaded.', 'ok');
+        if (liveNumbers) scheduleEvaluate();
+      } catch(e){ setStatus('That file isn’t a Slitherlink Builder project.', 'err'); }
+    };
+    reader.readAsText(file);
+  }
+
+  /* ---------------- About modal ---------------- */
+  const scrim = $('scrim');
+  function openAbout(){ scrim.classList.add('show'); $('closeAbout').focus(); }
+  function closeAbout(){ scrim.classList.remove('show'); $('aboutBtn').focus(); }
+  $('aboutBtn').onclick = openAbout;
+  $('closeAbout').onclick = closeAbout;
+  scrim.addEventListener('click', (e)=>{ if (e.target===scrim) closeAbout(); });
+
+  /* ---------------- Wire up ---------------- */
+  $('newGrid').onclick = newGrid;
+  $('generate').onclick = () => populateClues();
+  $('autoPuzzle').onclick = autoCreate;
+  $('check').onclick = checkUnique;
+  $('exportPng').onclick = exportPng;
+  $('printBtn').onclick = printPuzzle;
+  $('saveBtn').onclick = saveProject;
+  $('loadBtn').onclick = () => $('loadInput').click();
+  $('loadInput').onchange = (e) => { if (e.target.files[0]) loadProject(e.target.files[0]); e.target.value=''; };
+  $('clearLoop').onclick = clearLoop;
+  $('clearClues').onclick = clearClues;
+  $('undo').onclick = doUndo;
+  $('redo').onclick = doRedo;
+
+  document.addEventListener('keydown', (e) => {
+    if (scrim.classList.contains('show') && e.key === 'Escape'){ closeAbout(); return; }
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && (e.key === 'z' || e.key === 'Z')){ e.preventDefault(); if (e.shiftKey) doRedo(); else doUndo(); }
+    else if (mod && (e.key === 'y' || e.key === 'Y')){ e.preventDefault(); doRedo(); }
+  });
+
+  // Re-grid live when inputs change via Enter
+  for (const id of ['rows','cols']) $(id).addEventListener('keydown', (e)=>{ if (e.key==='Enter') newGrid(); });
+
+  newGrid();
+})();
+</script>
+</body>
+</html>
