@@ -186,6 +186,13 @@
       <button id="check" title="Confirm the visible clues have exactly one solution">Check unique</button>
     </div>
 
+    <div class="group" aria-label="Play">
+      <span class="glabel">Play</span>
+      <button id="playBtn" title="Open this puzzle in the player in a new tab">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        Play this puzzle</button>
+    </div>
+
     <div class="group" aria-label="Output">
       <span class="glabel">Output</span>
       <button id="exportPng" title="Download the puzzle as a PNG image">PNG</button>
@@ -230,6 +237,12 @@
       <h3>How it's made</h3>
       <p>It's a single HTML file — no install, no account, nothing leaves your machine. The grid is SVG; the hard part, checking that a set of clues has exactly one solution, runs in a background worker so the interface never freezes. That solver does proper Slitherlink deduction (forced edges, vertex parity, no premature little loops) rather than blind trial and error, which is why a 6×6 now takes a few milliseconds instead of the best part of an hour.</p>
       <h3>The diary</h3>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
+        <h4>A place to actually play</h4>
+        <p>Building a puzzle is one thing; the real test is solving it. There’s now a player — a separate tab you reach from the <b>Play this puzzle</b> button, or by opening a saved file. You draw your loop, mark crosses on edges you’ve ruled out, and watch each number grey out as it’s satisfied (or redden if you overshoot). It tells you when you’ve solved it, and there’s a <b>Reveal solution</b> if you’re stuck — worked out on the spot by the same solver. The answer never travels in the link, so a play URL can’t be reverse-engineered.</p>
+      </div>
 
       <div class="entry">
         <div class="date">23 June 2026</div>
@@ -612,7 +625,7 @@
     setEdgeVal(loc, paintVal);
     painting = true; moved = false; downX = ev.clientX; downY = ev.clientY;
     lastKey = loc.kind+loc.r+'_'+loc.c;
-    board.setPointerCapture(ev.pointerId);
+    try{ board.setPointerCapture(ev.pointerId); }catch(e){}
     afterLoopEdit();
     board._hover.classList.remove('show');
   });
@@ -707,7 +720,7 @@
   }
 
   /* ---------------- Busy / disable ---------------- */
-  const BTN_IDS = ['newGrid','generate','autoPuzzle','check','exportPng','printBtn','saveBtn','loadBtn','clearLoop','clearClues'];
+  const BTN_IDS = ['newGrid','generate','autoPuzzle','check','playBtn','exportPng','printBtn','saveBtn','loadBtn','clearLoop','clearClues'];
   function setBusy(b){ busy = b; for (const id of BTN_IDS) $(id).disabled = b; refreshUndo(); $('rows').disabled=b; $('cols').disabled=b; }
 
   /* ---------------- Actions ---------------- */
@@ -871,6 +884,15 @@
     reader.readAsText(file);
   }
 
+  /* ---------------- Open in player ---------------- */
+  function openPlayer(){
+    const clues = currentClueList();
+    if (!clues.length){ setStatus('There’s nothing to play yet — populate or create a puzzle first.', 'err'); return; }
+    const payload = { v:1, R, C, clues: clues.map(q => ({ r: Math.floor(q.cell/C), c: q.cell % C, n: q.n })) };
+    const hash = '#p=' + btoa(JSON.stringify(payload));
+    window.open('play.html' + hash, '_blank');
+  }
+
   /* ---------------- About modal ---------------- */
   const scrim = $('scrim');
   function openAbout(){ scrim.classList.add('show'); $('closeAbout').focus(); }
@@ -884,6 +906,7 @@
   $('generate').onclick = () => populateClues();
   $('autoPuzzle').onclick = autoCreate;
   $('check').onclick = checkUnique;
+  $('playBtn').onclick = openPlayer;
   $('exportPng').onclick = exportPng;
   $('printBtn').onclick = printPuzzle;
   $('saveBtn').onclick = saveProject;

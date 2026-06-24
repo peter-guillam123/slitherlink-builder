@@ -9,6 +9,7 @@ A small workshop tool for making [Slitherlink](https://en.wikipedia.org/wiki/Sli
 - Draw a single closed loop by clicking or dragging along the grid edges (it won't let the loop fork).
 - **Populate numbers** fills every cell with its edge count; **Create unique puzzle** then thins the clues to the smallest set that still has exactly one solution.
 - **Check unique** confirms a clue set is uniquely solvable; a rough **difficulty** read updates live as you edit.
+- **Play this puzzle** opens it in the player (`play.html`) in a new tab — solve it with lines and crosses, get live clue feedback, and a "Reveal solution" worked out by the solver. The player also opens saved `.json` files directly. The answer is never embedded in the play link.
 - Undo/redo, save & load a project, export a PNG, and a clean print/PDF layout.
 
 ## How it's built
