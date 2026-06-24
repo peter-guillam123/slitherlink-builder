@@ -151,6 +151,7 @@
       <p class="dek">Draw a loop, let it become a puzzle. Generates a clued, uniquely-solvable Slitherlink in milliseconds.</p>
     </div>
     <div class="mast-right">
+      <button class="ghost" id="openPlayerBtn" title="Open the player in a new tab">Open player ↗</button>
       <button class="ghost" id="aboutBtn" aria-haspopup="dialog">About &amp; changelog</button>
     </div>
   </header>
@@ -237,6 +238,12 @@
       <h3>How it's made</h3>
       <p>It's a single HTML file — no install, no account, nothing leaves your machine. The grid is SVG; the hard part, checking that a set of clues has exactly one solution, runs in a background worker so the interface never freezes. That solver does proper Slitherlink deduction (forced edges, vertex parity, no premature little loops) rather than blind trial and error, which is why a 6×6 now takes a few milliseconds instead of the best part of an hour.</p>
       <h3>The diary</h3>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
+        <h4>Don’t lose your work</h4>
+        <p>Your puzzle now saves itself to this browser as you build, so wandering off to the player, refreshing, or closing the tab no longer loses it — it’s waiting when you come back, and <b>New grid</b> starts you fresh. There’s an <b>Open player</b> link up top to reach the player directly, and the player’s empty screen finally has a working <b>Open a puzzle file</b> button rather than pointing at one that wasn’t there.</p>
+      </div>
 
       <div class="entry">
         <div class="date">23 June 2026</div>
@@ -494,6 +501,7 @@
       if (visibleClues[r][c] && fullClues[r][c] !== null){ t.textContent = fullClues[r][c]; t.style.opacity = 1; }
       else { t.textContent = ''; t.style.opacity = 0; }
     }
+    if (typeof scheduleSave === 'function') scheduleSave();
   }
 
   /* ---------------- Undo / redo ---------------- */
@@ -884,13 +892,40 @@
     reader.readAsText(file);
   }
 
+  /* ---------------- Autosave (survives navigating to the player, refreshes, etc.) ---------------- */
+  const LS_KEY = 'slitherlink-builder:autosave:v1';
+  let saveTimer = null;
+  function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveSession, 400); }
+  function saveSession(){
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ R, C, hEdges, vEdges, fullClues, visibleClues, liveNumbers })); } catch(e){}
+  }
+  function restoreSession(){
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      if (!d.R || !d.C || !d.hEdges) return false;
+      const hasContent = d.hEdges.some(r=>r.some(Boolean)) || d.vEdges.some(r=>r.some(Boolean)) || d.visibleClues.some(r=>r.some(Boolean));
+      if (!hasContent) return false;
+      R = d.R; C = d.C; $('rows').value = R; $('cols').value = C;
+      hEdges = d.hEdges; vEdges = d.vEdges; fullClues = d.fullClues; visibleClues = d.visibleClues;
+      liveNumbers = !!d.liveNumbers;
+      undoStack = []; redoStack = [];
+      buildBoard(); refreshUndo();
+      setStatus('Restored your last puzzle. “New grid” starts a fresh one.');
+      if (liveNumbers) scheduleEvaluate();
+      return true;
+    } catch(e){ return false; }
+  }
+
   /* ---------------- Open in player ---------------- */
   function openPlayer(){
     const clues = currentClueList();
     if (!clues.length){ setStatus('There’s nothing to play yet — populate or create a puzzle first.', 'err'); return; }
     const payload = { v:1, R, C, clues: clues.map(q => ({ r: Math.floor(q.cell/C), c: q.cell % C, n: q.n })) };
     const hash = '#p=' + btoa(JSON.stringify(payload));
-    window.open('play.html' + hash, '_blank');
+    const w = window.open('play.html' + hash, '_blank');
+    if (!w) setStatus('Your browser blocked the new tab — allow pop-ups. (Your puzzle is auto-saved, so it’s safe either way.)', '');
   }
 
   /* ---------------- About modal ---------------- */
@@ -907,6 +942,7 @@
   $('autoPuzzle').onclick = autoCreate;
   $('check').onclick = checkUnique;
   $('playBtn').onclick = openPlayer;
+  $('openPlayerBtn').onclick = () => { const w = window.open('play.html', '_blank'); if (!w) setStatus('Your browser blocked the new tab — allow pop-ups.', ''); };
   $('exportPng').onclick = exportPng;
   $('printBtn').onclick = printPuzzle;
   $('saveBtn').onclick = saveProject;
@@ -927,7 +963,7 @@
   // Re-grid live when inputs change via Enter
   for (const id of ['rows','cols']) $(id).addEventListener('keydown', (e)=>{ if (e.key==='Enter') newGrid(); });
 
-  newGrid();
+  if (!restoreSession()) newGrid();
 })();
 </script>
 </body>

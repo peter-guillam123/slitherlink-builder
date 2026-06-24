@@ -100,7 +100,9 @@
   .empty{display:none; text-align:center; padding:48px 20px}
   .empty.show{display:block}
   .empty h3{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:22px; margin:0 0 6px}
-  .empty p{color:var(--muted); font-size:14px; margin:0 0 16px}
+  .empty p{color:var(--muted); font-size:14px; margin:0 0 18px}
+  .empty .bigopen{margin:0 auto 18px; background:var(--accent); color:#FBFAF5; border-color:var(--accent); font-size:14.5px; padding:10px 18px}
+  .empty .bigopen:hover{background:var(--accent-2); color:#fff; border-color:var(--accent-2)}
   .dropzone{border:1.5px dashed var(--line-strong); border-radius:12px; padding:30px; color:var(--muted); font-size:14px}
   .dropzone.drag{border-color:var(--accent-2); background:rgba(28,122,71,.05); color:var(--accent-ink)}
 
@@ -164,7 +166,8 @@
     <div class="empty" id="empty">
       <h3>No puzzle loaded</h3>
       <p>Open one from the builder’s “Play this puzzle” button, or load a saved file.</p>
-      <div class="dropzone" id="dropzone">Drop a saved <b>.json</b> here, or click <b>Open file</b> above.</div>
+      <button id="emptyOpenBtn" class="bigopen">Open a puzzle file…</button>
+      <div class="dropzone" id="dropzone">…or drop a saved <b>.json</b> here.</div>
     </div>
   </div>
 
@@ -316,6 +319,7 @@
     solved = false; revealed = false; loaded = true;
     started = false; stopTimer(); $('timerVal').textContent = '0:00';
     $('empty').classList.remove('show');
+    document.querySelector('.boardholder').style.display = '';
     $('toolbar').style.display = '';
     $('sizeChip').hidden = false; $('sizeVal').textContent = `${R}×${C}`;
     $('timerChip').hidden = false;
@@ -573,6 +577,7 @@
     });
   };
   $('openBtn').onclick = () => $('openInput').click();
+  $('emptyOpenBtn').onclick = () => $('openInput').click();
   $('openInput').onchange = (e) => { if (e.target.files[0]) loadFromFile(e.target.files[0]); e.target.value=''; };
 
   // drag & drop onto the stage
@@ -591,6 +596,7 @@
   /* ---------------- Boot ---------------- */
   if (!tryLoadFromHash()){
     $('empty').classList.add('show');
+    document.querySelector('.boardholder').style.display = 'none';
     $('toolbar').style.display = 'none';
     $('sizeChip').hidden = true; $('timerChip').hidden = true;
     setStatus('Open a puzzle to begin.');
