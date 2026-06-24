@@ -217,7 +217,7 @@
   </div>
 
   <p class="help">
-    <b>Click an edge</b> to add it to your loop — or click-and-drag to paint a line; drag back over it to erase.
+    <b>Click an edge</b> to toggle it on or off — or <b>drag</b> to draw a line, scrubbing back over it to lift it.
     The loop can’t fork — each dot joins at most two lines. Build one single closed loop, then press <b>Create unique puzzle</b>: it fills every clue, then quietly removes as many as it can while the puzzle still has exactly one solution.
     After that, <b>click any number</b> to hide or restore it — the difficulty re-reads as you go. Numbers track the loop live if you redraw it. <kbd>⌘Z</kbd> undoes, <kbd>⇧⌘Z</kbd> redoes.
   </p>
@@ -238,6 +238,12 @@
       <h3>How it's made</h3>
       <p>It's a single HTML file — no install, no account, nothing leaves your machine. The grid is SVG; the hard part, checking that a set of clues has exactly one solution, runs in a background worker so the interface never freezes. That solver does proper Slitherlink deduction (forced edges, vertex parity, no premature little loops) rather than blind trial and error, which is why a 6×6 now takes a few milliseconds instead of the best part of an hour.</p>
       <h3>The diary</h3>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
+        <h4>Drawing that does what you mean</h4>
+        <p>The old drawing model had a trap: a drag took its cue from the first edge you touched, so starting a stroke on a line you’d already drawn quietly rubbed it out — invisible on a phone, where there’s no hover to warn you. Now a <b>drag only ever draws</b>; to take a segment back you scrub back over it within the same stroke, and starting a drag on an existing line <i>extends</i> it. A single <b>click toggles a line</b>; a <b>double-click drops a cross</b> (Alan’s suggestion — more intuitive than a right-click), the same gesture on desktop and mobile. Right-click and the ✕ Cross mode still work for anyone who prefers them, so nobody who finds double-tapping fiddly is locked out.</p>
+      </div>
 
       <div class="entry">
         <div class="date">23 June 2026</div>
@@ -605,56 +611,48 @@
     });
   }
 
-  let painting = false, paintVal = false, lastKey = '';
-  let downX = 0, downY = 0, moved = false;
+  let painting = false, moved = false, downX = 0, downY = 0, downLoc = null, lastDragKey = '';
+  let strokeLaid = [];
   const DRAG_START = 7;   // screen px before a press becomes a drag (keeps a jittery tap from painting neighbours)
+  const kk = (l) => l.kind + l.r + '_' + l.c;
+
+  // Drag draws lines only (never erases based on the first edge); scrub back over a freshly-laid
+  // edge to lift it. Forks are skipped. Returns whether the edge ended up laid.
+  function layLine(loc){
+    const pre = edgeVal(loc);
+    if (!pre){ if (wouldFork(loc)) return false; setEdgeVal(loc, true); }
+    strokeLaid.push({ loc, pre });
+    return true;
+  }
+
   board.addEventListener('pointerdown', (ev) => {
     if (busy) return;
     const {x,y,scale} = clientToSvg(ev);
     const loc = locate(x, y, tolFor(ev, scale));
     if (!loc) return;
-    if (loc.kind === 'cell'){
-      if (fullClues[loc.r][loc.c] !== null){
-        snapshot();
-        visibleClues[loc.r][loc.c] = !visibleClues[loc.r][loc.c];
-        render();
-        scheduleEvaluate();   // #3: difficulty/uniqueness updates as clues are hidden or restored
-      }
-      return;
-    }
-    // edge: begin paint stroke
-    const adding = !edgeVal(loc);
-    if (adding && wouldFork(loc)){
-      setStatus('Each dot joins at most two lines — that would fork the loop.', 'err');
-      return;
-    }
-    snapshot();
-    paintVal = adding;
-    setEdgeVal(loc, paintVal);
     painting = true; moved = false; downX = ev.clientX; downY = ev.clientY;
-    lastKey = loc.kind+loc.r+'_'+loc.c;
+    downLoc = loc; strokeLaid = []; lastDragKey = kk(loc);
     try{ board.setPointerCapture(ev.pointerId); }catch(e){}
-    afterLoopEdit();
     board._hover.classList.remove('show');
   });
   board.addEventListener('pointermove', (ev) => {
     if (painting){
-      // ignore tiny movement so a tap doesn't bleed into the next edge
+      if (downLoc.kind === 'cell') return;   // can't drag from a clue cell
       if (!moved){
         if (Math.hypot(ev.clientX - downX, ev.clientY - downY) < DRAG_START) return;
-        moved = true;
+        moved = true; snapshot(); layLine(downLoc); afterLoopEdit();
       }
       const {x,y,scale} = clientToSvg(ev);
       const loc = locate(x, y, tolFor(ev, scale));
       if (loc && (loc.kind==='h' || loc.kind==='v')){
-        const key = loc.kind+loc.r+'_'+loc.c;
-        if (key !== lastKey){
-          lastKey = key;
-          if (edgeVal(loc) !== paintVal){
-            // when painting a line on, skip edges that would fork; erasing is always allowed
-            if (paintVal && wouldFork(loc)) { /* skip */ }
-            else { setEdgeVal(loc, paintVal); afterLoopEdit(); }
+        const k = kk(loc);
+        if (k !== lastDragKey){
+          if (strokeLaid.length>=2 && k === kk(strokeLaid[strokeLaid.length-2].loc)){
+            const last = strokeLaid.pop(); setEdgeVal(last.loc, last.pre);   // scrub back
+          } else {
+            layLine(loc);
           }
+          lastDragKey = k; afterLoopEdit();
         }
       }
       return;
@@ -671,11 +669,27 @@
     } else hv.classList.remove('show');
   });
   function endPaint(ev){
-    if (painting){
-      painting=false; lastKey='';
-      try{ board.releasePointerCapture(ev.pointerId);}catch(e){}
+    if (!painting) return;
+    painting = false;
+    try{ board.releasePointerCapture(ev.pointerId);}catch(e){}
+    if (moved){
       if (liveNumbers && drawnLoopIsSingleLoop()) scheduleEvaluate();
+      return;
     }
+    // tap (no drag)
+    const loc = downLoc; if (!loc) return;
+    if (loc.kind === 'cell'){
+      if (fullClues[loc.r][loc.c] !== null){
+        snapshot();
+        visibleClues[loc.r][loc.c] = !visibleClues[loc.r][loc.c];
+        render(); scheduleEvaluate();
+      }
+      return;
+    }
+    const on = edgeVal(loc);
+    if (!on && wouldFork(loc)){ setStatus('Each dot joins at most two lines — that would fork the loop.', 'err'); return; }
+    snapshot(); setEdgeVal(loc, !on); afterLoopEdit();
+    if (liveNumbers && drawnLoopIsSingleLoop()) scheduleEvaluate();
   }
   board.addEventListener('pointerup', endPaint);
   board.addEventListener('pointercancel', endPaint);

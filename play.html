@@ -172,7 +172,7 @@
   </div>
 
   <p class="help">
-    <b>Click or drag an edge</b> to draw part of your loop; drag back over it to erase. Switch to <b>✕ Cross</b> to mark edges you’ve ruled out — or just right-click an edge.
+    <b>Click an edge</b> for a line, <b>double-click</b> for a cross. Or <b>drag</b> to draw a line — scrub back over it to lift it. (Right-click also crosses, and the <b>✕ Cross</b> mode places crosses with single taps.)
     A number greys out once it has the right count of lines, and turns red if it has too many. You’ve solved it when one single loop satisfies every number. <kbd>⌘Z</kbd> undoes.
   </p>
 </div>
@@ -488,17 +488,34 @@
     if (vHit && vD<=tol) return vHit;
     return null;
   }
-  const lineVal = (l) => l.kind==='h' ? hLine[l.r][l.c] : vLine[l.r][l.c];
-  const crossVal = (l) => l.kind==='h' ? hCross[l.r][l.c] : vCross[l.r][l.c];
-  function setLine(l, val){ if (l.kind==='h'){ hLine[l.r][l.c]=val; if(val) hCross[l.r][l.c]=false; } else { vLine[l.r][l.c]=val; if(val) vCross[l.r][l.c]=false; } }
-  function setCross(l, val){ if (l.kind==='h'){ hCross[l.r][l.c]=val; if(val) hLine[l.r][l.c]=false; } else { vCross[l.r][l.c]=val; if(val) vLine[l.r][l.c]=false; } }
+  // Edge state machine: 0 = empty, 1 = line, 2 = cross
+  const EMPTY = 0, LINE = 1, CROSS = 2;
+  const keyOf = (l) => l.kind + l.r + '_' + l.c;
+  function edgeState(l){
+    if (l.kind==='h') return hLine[l.r][l.c] ? LINE : (hCross[l.r][l.c] ? CROSS : EMPTY);
+    return vLine[l.r][l.c] ? LINE : (vCross[l.r][l.c] ? CROSS : EMPTY);
+  }
+  function setEdgeState(l, st){
+    if (l.kind==='h'){ hLine[l.r][l.c] = (st===LINE); hCross[l.r][l.c] = (st===CROSS); }
+    else { vLine[l.r][l.c] = (st===LINE); vCross[l.r][l.c] = (st===CROSS); }
+  }
 
-  let painting=false, paintKind='line', paintVal=false, lastKey='', downX=0, downY=0, movedFlag=false;
-  const DRAG_START = 7;
+  let painting=false, movedFlag=false, downX=0, downY=0, downEdge=null, lastDragKey='';
+  let dragKind='line', strokeLaid=[], dragSnapshotted=false;
+  let lastTapKey='', lastTapTime=0, lastTapOrig=EMPTY;
+  const DRAG_START = 7, DOUBLE_MS = 320;
 
-  function applyAt(loc){
-    if (paintKind==='line'){ if (lineVal(loc)!==paintVal) setLine(loc, paintVal); }
-    else { if (crossVal(loc)!==paintVal) setCross(loc, paintVal); }
+  // Drag = draw only (never erases based on the first edge). Scrub back over freshly-laid
+  // line to lift it. Single tap toggles a line; double tap/click toggles a cross.
+  function layEdge(loc){
+    if (dragKind === 'cross'){
+      if (edgeState(loc) !== CROSS) setEdgeState(loc, CROSS);
+      strokeLaid.push({ loc, pre: EMPTY });   // pre unused for cross paint
+    } else {
+      const pre = edgeState(loc);
+      if (pre !== LINE) setEdgeState(loc, LINE);
+      strokeLaid.push({ loc, pre });
+    }
   }
 
   board.addEventListener('pointerdown', (ev) => {
@@ -506,22 +523,45 @@
     const {x,y,scale} = clientToSvg(ev);
     const loc = locate(x, y, tolFor(ev, scale));
     if (!loc) return;
-    const wantCross = (ev.pointerType==='mouse' && ev.button===2) || (ev.pointerType!=='mouse' && mode==='cross') || (ev.pointerType==='mouse' && ev.button===0 && mode==='cross');
-    paintKind = wantCross ? 'cross' : 'line';
-    paintVal = paintKind==='line' ? !lineVal(loc) : !crossVal(loc);
-    snapshot();
-    applyAt(loc);
-    painting=true; movedFlag=false; downX=ev.clientX; downY=ev.clientY; lastKey = loc.kind+loc.r+'_'+loc.c;
+    // desktop bonus: right-click toggles a cross immediately
+    if (ev.pointerType==='mouse' && ev.button===2){
+      snapshot();
+      setEdgeState(loc, edgeState(loc)===CROSS ? EMPTY : CROSS);
+      startTimer(); render(); checkWin();
+      lastTapKey=''; board._hover.classList.remove('show');
+      return;
+    }
+    if (ev.pointerType==='mouse' && ev.button!==0) return;
+    painting=true; movedFlag=false; dragSnapshotted=false; strokeLaid=[];
+    downX=ev.clientX; downY=ev.clientY; downEdge=loc; lastDragKey=keyOf(loc);
     try{ board.setPointerCapture(ev.pointerId); }catch(e){}
-    startTimer(); render(); checkWin();
     board._hover.classList.remove('show');
   });
+
   board.addEventListener('pointermove', (ev) => {
     if (painting){
-      if (!movedFlag){ if (Math.hypot(ev.clientX-downX, ev.clientY-downY) < DRAG_START) return; movedFlag=true; }
+      if (!movedFlag){
+        if (Math.hypot(ev.clientX-downX, ev.clientY-downY) < DRAG_START) return;
+        movedFlag = true;
+        snapshot(); dragSnapshotted = true; startTimer();
+        dragKind = (mode==='cross') ? 'cross' : 'line';
+        layEdge(downEdge); render(); checkWin();
+      }
       const {x,y,scale} = clientToSvg(ev);
       const loc = locate(x, y, tolFor(ev, scale));
-      if (loc){ const key = loc.kind+loc.r+'_'+loc.c; if (key!==lastKey){ lastKey=key; applyAt(loc); render(); checkWin(); } }
+      if (loc){
+        const k = keyOf(loc);
+        if (k !== lastDragKey){
+          // scrub back: pointer returned to the previous freshly-laid line edge -> lift the last one
+          if (dragKind==='line' && strokeLaid.length>=2 && k === keyOf(strokeLaid[strokeLaid.length-2].loc)){
+            const last = strokeLaid.pop();
+            setEdgeState(last.loc, last.pre);
+          } else {
+            layEdge(loc);
+          }
+          lastDragKey = k; render(); checkWin();
+        }
+      }
       return;
     }
     if (ev.pointerType === 'touch') return;
@@ -534,7 +574,36 @@
       hv.classList.add('show');
     } else hv.classList.remove('show');
   });
-  function endPaint(ev){ if (painting){ painting=false; lastKey=''; try{ board.releasePointerCapture(ev.pointerId);}catch(e){} } }
+
+  function handleTap(loc){
+    // explicit cross mode (no-timing fallback): single tap toggles a cross
+    if (mode === 'cross'){
+      snapshot();
+      setEdgeState(loc, edgeState(loc)===CROSS ? EMPTY : CROSS);
+      startTimer(); render(); checkWin(); lastTapKey=''; return;
+    }
+    const now = performance.now(), k = keyOf(loc);
+    if (k === lastTapKey && (now - lastTapTime) < DOUBLE_MS){
+      // double tap/click -> toggle cross relative to the state before the first tap (reuse its snapshot)
+      setEdgeState(loc, lastTapOrig===CROSS ? EMPTY : CROSS);
+      render(); checkWin(); lastTapKey='';
+    } else {
+      // single tap -> toggle a line (clears a cross to a line)
+      snapshot();
+      const orig = edgeState(loc);
+      setEdgeState(loc, orig===LINE ? EMPTY : LINE);
+      startTimer(); render(); checkWin();
+      lastTapKey=k; lastTapTime=now; lastTapOrig=orig;
+    }
+  }
+
+  function endPaint(ev){
+    if (!painting) return;
+    painting=false;
+    try{ board.releasePointerCapture(ev.pointerId);}catch(e){}
+    if (movedFlag){ lastTapKey=''; return; }   // was a drag
+    if (downEdge) handleTap(downEdge);
+  }
   board.addEventListener('pointerup', endPaint);
   board.addEventListener('pointercancel', endPaint);
   board.addEventListener('pointerleave', () => board._hover.classList.remove('show'));
