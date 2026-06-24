@@ -123,7 +123,7 @@
       <h1>Slitherlink <em>Player</em></h1>
       <p class="dek">Draw a single loop so every number equals the lines around its cell.</p>
     </div>
-    <a class="back" href="index.html">← Back to builder</a>
+    <a class="back" id="backLink" href="index.html">← Back to builder</a>
   </header>
 
   <div class="toolbar" id="toolbar" role="toolbar" aria-label="Player controls">
@@ -576,6 +576,15 @@
       setStatus('Solution revealed.', 'ok');
     });
   };
+  // If this tab was opened from the builder, "Back" closes it (returning to the still-open
+  // builder tab). Opened standalone, it navigates to the builder as normal.
+  $('backLink').addEventListener('click', (e) => {
+    if (window.opener && !window.opener.closed){
+      e.preventDefault();
+      try { window.opener.focus(); } catch(err){}
+      window.close();
+    }
+  });
   $('openBtn').onclick = () => $('openInput').click();
   $('emptyOpenBtn').onclick = () => $('openInput').click();
   $('openInput').onchange = (e) => { if (e.target.files[0]) loadFromFile(e.target.files[0]); e.target.value=''; };
