@@ -249,6 +249,12 @@
 
       <div class="entry">
         <div class="date">23 June 2026</div>
+        <h4>Loops that fill the grid</h4>
+        <p>Alan’s first verdict on the generator was fair: it stranded a tiny loop in the corner of a big grid. He was right that the loop’s shape and the difficulty are the same lever — a loop that spans the grid and winds is both better-looking and harder. So the generator now grows its loops by eroding a full grid down to an irregular, winding shape that reaches near every corner, and difficulty is set by how many clues are left in rather than by pruning to the bone (which was producing brutally hard, slow-to-make puzzles on big grids). Every size now generates in well under a tenth of a second.</p>
+      </div>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
         <h4>Three buttons that invent a puzzle</h4>
         <p>You no longer have to draw a loop to get a puzzle: <b>Gentle</b>, <b>Tricky</b> and <b>Fiendish</b> invent a fresh one at roughly the difficulty you ask for, ready to play. The trick is honest brute force — because the solver is so fast, it keeps inventing random puzzles and throwing them back until one lands in the band you wanted, which takes only a handful of tries. Two caveats worth knowing: the rating is the solver’s own measure of how much <i>guessing beyond pure logic</i> a puzzle needs, which tracks human difficulty most of the time but isn’t the same thing; and it’s relative to the grid size, so a Fiendish 6×6 is gentler than a Fiendish 10×10. Three broad bands, deliberately — anything finer would be pretending to a precision it doesn’t have.</p>
       </div>
@@ -382,29 +388,65 @@
   let cache={key:'',solver:null};
   function solverFor(R,C){const k=R+'x'+C;if(cache.key!==k){cache={key:k,solver:makeSolver(R,C)};}return cache.solver;}
 
-  // --- "generate to a difficulty": random loop -> clues -> prune; keep ones in the target band ---
-  function randomRegion(R,C){
-    const lo=new Array(R),hi=new Array(R);
-    let plo=Math.floor(Math.random()*C),phi=plo+Math.floor(Math.random()*(C-plo));
-    for(let r=0;r<R;r++){ if(r===0){lo[r]=plo;hi[r]=phi;} else{
-      let nlo=Math.max(0,Math.min(C-1,plo+(Math.floor(Math.random()*5)-2))), nhi=Math.max(nlo,Math.min(C-1,phi+(Math.floor(Math.random()*5)-2)));
-      if(nhi<plo)nhi=plo; if(nlo>phi)nlo=phi; lo[r]=nlo;hi[r]=nhi;plo=nlo;phi=nhi; } }
-    return (r,c)=>c>=lo[r]&&c<=hi[r];
+  // --- "generate to a difficulty": spanning loop -> clues -> prune; keep ones in the target band ---
+  function shuf(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+  const GEN_CAP=20000;   // a clue is only removed if uniqueness re-verifies within this many steps (keeps it fast + bounds hardness)
+  const N4=[[1,0],[-1,0],[0,1],[0,-1]];
+
+  function regionConnected(inR,R,C,count){
+    let sr=-1,sc=-1;
+    for(let r=0;r<R&&sr<0;r++)for(let c=0;c<C;c++){ if(inR[r][c]){sr=r;sc=c;break;} }
+    if(sr<0) return false;
+    const seen=Array.from({length:R},()=>new Uint8Array(C));
+    const st=[[sr,sc]]; seen[sr][sc]=1; let n=0;
+    while(st.length){ const a=st.pop(),r=a[0],c=a[1]; n++;
+      for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr>=0&&nr<R&&nc>=0&&nc<C&&inR[nr][nc]&&!seen[nr][nc]){seen[nr][nc]=1;st.push([nr,nc]);} } }
+    return n===count;
+  }
+  function holeFree(inR,R,C){   // every non-region cell must reach the grid border through non-region cells
+    const seen=Array.from({length:R},()=>new Uint8Array(C)); const st=[];
+    for(let r=0;r<R;r++)for(let c=0;c<C;c++){ if((r===0||r===R-1||c===0||c===C-1)&&!inR[r][c]&&!seen[r][c]){seen[r][c]=1;st.push([r,c]);} }
+    while(st.length){ const a=st.pop(),r=a[0],c=a[1];
+      for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr>=0&&nr<R&&nc>=0&&nc<C&&!inR[nr][nc]&&!seen[nr][nc]){seen[nr][nc]=1;st.push([nr,nc]);} } }
+    for(let r=0;r<R;r++)for(let c=0;c<C;c++) if(!inR[r][c]&&!seen[r][c]) return false;
+    return true;
+  }
+  function spansCorners(inR,R,C){   // loop comes within ~2 dots of every corner
+    const blocks=[[0,0],[0,Math.max(0,C-2)],[Math.max(0,R-2),0],[Math.max(0,R-2),Math.max(0,C-2)]];
+    for(const b of blocks){ let ok=false;
+      for(let r=b[0];r<=Math.min(R-1,b[0]+1)&&!ok;r++)for(let c=b[1];c<=Math.min(C-1,b[1]+1);c++){ if(inR[r][c]){ok=true;break;} }
+      if(!ok) return false; }
+    return true;
+  }
+  // Erode a full grid down to a target fill, keeping it connected and hole-free. Lower fill = more
+  // winding loop = harder; higher fill = smoother = easier. The boundary is one simply-closed loop.
+  function spanningRegion(R,C,fillTarget){
+    const inR=Array.from({length:R},()=>new Uint8Array(C).fill(1));
+    let count=R*C; const target=Math.max(4,Math.floor(fillTarget*R*C)); let guard=R*C*10;
+    while(count>target && guard-->0){
+      const r=Math.floor(Math.random()*R), c=Math.floor(Math.random()*C);
+      if(!inR[r][c]) continue;
+      let bnd=(r===0||r===R-1||c===0||c===C-1);
+      if(!bnd){ for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr>=0&&nr<R&&nc>=0&&nc<C&&!inR[nr][nc]){bnd=true;break;} } }
+      if(!bnd) continue;
+      inR[r][c]=0;
+      if(count-1>=4 && regionConnected(inR,R,C,count-1) && holeFree(inR,R,C)) count--;
+      else inR[r][c]=1;
+    }
+    return inR;
   }
   function regionToLoop(R,C,inR){
     const h=Array.from({length:R+1},()=>new Array(C).fill(false));
     const v=Array.from({length:R},()=>new Array(C+1).fill(false));
-    const I=(r,c)=>(r>=0&&r<R&&c>=0&&c<C)?inR(r,c):false;
+    const I=(r,c)=>(r>=0&&r<R&&c>=0&&c<C)?!!inR[r][c]:false;
     for(let r=0;r<=R;r++)for(let c=0;c<C;c++) h[r][c]=I(r-1,c)!==I(r,c);
     for(let r=0;r<R;r++)for(let c=0;c<=C;c++) v[r][c]=I(r,c-1)!==I(r,c);
     return {h,v};
   }
-  function shuf(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
-  const GEN_CAP=2000000;
-  function randomLoopPuzzle(R,C,solver,minVisible){
-    const inR=randomRegion(R,C); const {h,v}=regionToLoop(R,C,inR);
+  // Build a unique puzzle from a fixed loop (h,v). Used for both random and user-drawn loops.
+  function puzzleFromLoop(R,C,solver,h,v,minVisible){
     const full=[]; for(let r=0;r<R;r++)for(let c=0;c<C;c++){ const n=(h[r][c]?1:0)+(h[r+1][c]?1:0)+(v[r][c]?1:0)+(v[r][c+1]?1:0); full.push({cell:r*C+c,n}); }
-    const fr=solver.count(full,2,GEN_CAP); if(fr.capped||fr.count!==1) return null;   // skip degenerate / non-unique loops
+    const fr=solver.count(full,2,GEN_CAP); if(fr.capped||fr.count!==1) return null;
     const visible=new Array(R*C).fill(true); let vis=R*C;
     for(const cell of shuf(full.map(q=>q.cell))){ if(vis<=minVisible)break; visible[cell]=false;
       const cl=[]; for(let i=0;i<R*C;i++) if(visible[i]) cl.push(full[i]);
@@ -413,30 +455,34 @@
     const r=solver.count(fc,2,GEN_CAP); if(r.capped) return null;
     return { h, v, full: full.map(q=>q.n), visible, branches:r.branches };
   }
-  const floorCache={};
+  function randomLoopPuzzle(R,C,solver,minVisible,fillTarget){
+    const inR=spanningRegion(R,C,fillTarget);
+    if(!spansCorners(inR,R,C)) return null;
+    const {h,v}=regionToLoop(R,C,inR);
+    return puzzleFromLoop(R,C,solver,h,v,minVisible);
+  }
+  // A nicely-spanning winding loop for any band; difficulty is set by clue density, not loop shape.
+  function fillFor(R,C){ const N=Math.max(R,C); return Math.min(0.78, 0.52 + Math.max(0,N-6)*0.02); }
+  // Difficulty = how many clues we leave in. Fewer clues = harder. Fast and reliable; GEN_CAP bounds
+  // how hard a sparse puzzle is allowed to get (a removal that takes too long to verify is kept).
+  // Base clue-keep fractions; on bigger grids leave relatively more clues (very sparse big grids are
+  // both brutal to solve and slow to verify), which keeps generation fast everywhere.
+  function keepFor(band,R,C){
+    const N=Math.max(R,C), bump=Math.max(0,N-8)*0.022;
+    if(band==='gentle') return 0.60;                       // easy + fast regardless of size
+    if(band==='tricky')  return Math.min(0.55, 0.42+bump); // stays below gentle, above fiendish
+    return Math.min(0.48, 0.28+bump);                      // fiendish
+  }
   function generatePuzzle(R,C,band,prog){
-    const solver=solverFor(R,C);
-    if(band==='gentle'){
-      const minVis=Math.round(R*C*0.55);   // leave more clues -> reliably easier
-      for(let t=0;t<80;t++){ const p=randomLoopPuzzle(R,C,solver,minVis); if(p){p.hit=true;return p;} prog(t,80); }
-      return null;
+    const solver=solverFor(R,C), fill=fillFor(R,C);
+    const minVis=Math.max(1, Math.round(R*C*keepFor(band,R,C)));
+    let best=null;
+    for(let t=0;t<60;t++){
+      const p=randomLoopPuzzle(R,C,solver,minVis,fill);
+      if(p){ p.hit=true; return p; }
+      prog(t,60);
     }
-    if(band==='fiendish'){
-      let floor=floorCache[R+'x'+C], best=null;
-      if(floor==null){   // calibrate once per grid size: floor = clearly above the typical minimal-prune grind
-        const samp=[];
-        for(let t=0;t<18;t++){ const p=randomLoopPuzzle(R,C,solver,0); if(p){samp.push(p); if(!best||p.branches>best.branches)best=p;} prog(t,98); }
-        samp.sort((a,b)=>a.branches-b.branches);
-        const med=samp.length?samp[Math.floor(samp.length/2)].branches:50;
-        floor=Math.max(30,Math.round(med*1.6)); floorCache[R+'x'+C]=floor;
-        if(best&&best.branches>=floor){best.hit=true;return best;}
-      }
-      for(let t=0;t<80;t++){ const p=randomLoopPuzzle(R,C,solver,0); if(p){ if(p.branches>=floor){p.hit=true;return p;} if(!best||p.branches>best.branches)best=p; } prog(18+t,98); }
-      if(best){best.hit=false;return best;}   // best-effort: hardest we could find
-      return null;
-    }
-    for(let t=0;t<60;t++){ const p=randomLoopPuzzle(R,C,solver,0); if(p){p.hit=true;return p;} prog(t,60); }   // tricky = minimal prune
-    return null;
+    return best;   // null only if no loop produced a unique full clue set (very rare)
   }
 
   onmessage=function(ev){
