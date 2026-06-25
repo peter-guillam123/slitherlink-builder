@@ -182,6 +182,13 @@
       <button id="clearClues" title="Remove all numbers">Clear numbers</button>
     </div>
 
+    <div class="group" aria-label="Generate to a difficulty">
+      <span class="glabel">Generate</span>
+      <button id="genGentle" title="Invent a fresh gentle puzzle">Gentle</button>
+      <button id="genTricky" title="Invent a fresh tricky puzzle">Tricky</button>
+      <button id="genFiendish" title="Invent a fresh fiendish puzzle">Fiendish</button>
+    </div>
+
     <div class="group" aria-label="Verify">
       <span class="glabel">Verify</span>
       <button id="check" title="Confirm the visible clues have exactly one solution">Check unique</button>
@@ -220,6 +227,7 @@
     <b>Click an edge</b> to toggle it on or off — or <b>drag</b> to draw a line, scrubbing back over it to lift it.
     The loop can’t fork — each dot joins at most two lines. Build one single closed loop, then press <b>Create unique puzzle</b>: it fills every clue, then quietly removes as many as it can while the puzzle still has exactly one solution.
     After that, <b>click any number</b> to hide or restore it — the difficulty re-reads as you go. Numbers track the loop live if you redraw it. <kbd>⌘Z</kbd> undoes, <kbd>⇧⌘Z</kbd> redoes.
+    Or skip drawing altogether: the <b>Generate</b> buttons invent a fresh puzzle at roughly the difficulty you pick.
   </p>
 
   <!-- Print target -->
@@ -238,6 +246,12 @@
       <h3>How it's made</h3>
       <p>It's a single HTML file — no install, no account, nothing leaves your machine. The grid is SVG; the hard part, checking that a set of clues has exactly one solution, runs in a background worker so the interface never freezes. That solver does proper Slitherlink deduction (forced edges, vertex parity, no premature little loops) rather than blind trial and error, which is why a 6×6 now takes a few milliseconds instead of the best part of an hour.</p>
       <h3>The diary</h3>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
+        <h4>Three buttons that invent a puzzle</h4>
+        <p>You no longer have to draw a loop to get a puzzle: <b>Gentle</b>, <b>Tricky</b> and <b>Fiendish</b> invent a fresh one at roughly the difficulty you ask for, ready to play. The trick is honest brute force — because the solver is so fast, it keeps inventing random puzzles and throwing them back until one lands in the band you wanted, which takes only a handful of tries. Two caveats worth knowing: the rating is the solver’s own measure of how much <i>guessing beyond pure logic</i> a puzzle needs, which tracks human difficulty most of the time but isn’t the same thing; and it’s relative to the grid size, so a Fiendish 6×6 is gentler than a Fiendish 10×10. Three broad bands, deliberately — anything finer would be pretending to a precision it doesn’t have.</p>
+      </div>
 
       <div class="entry">
         <div class="date">23 June 2026</div>
@@ -320,7 +334,7 @@
     const inC=new Uint8Array(R*C),inV=new Uint8Array(NV);
     let qCell=[],qVert=[],clue=new Int8Array(R*C);
     const trail=[],unionTrail=[];
-    let onCount=0,solutions=0,limit=2,branchDecisions=0,gFail=false,gDone=false;
+    let onCount=0,solutions=0,limit=2,branchDecisions=0,gFail=false,gDone=false,cap=Infinity,capped=false;
     function find(x){while(parent[x]!==x)x=parent[x];return x;}
     function validSingleLoop(){
       for(let v=0;v<NV;v++){const a=vertEdges[v];let d=0;for(let i=0;i<a.length;i++)if(state[a[i]]===1)d++;if(d!==0&&d!==2)return false;}
@@ -352,21 +366,78 @@
     function undo(em,um,om){while(trail.length>em)state[trail.pop()]=0;while(unionTrail.length>um){const enc=unionTrail.pop();const rb=enc&0xfff,ra=(enc>>12)&0xfff,ri=(enc>>24)&1;compE[ra]-=compE[rb]+1;parent[rb]=rb;if(ri)rank[ra]--;}onCount=om;}
     function vertHasOn(v){const a=vertEdges[v];for(let i=0;i<a.length;i++)if(state[a[i]]===1)return true;return false;}
     function chooseEdge(){let best=-1,bs=-1;for(let e=0;e<E;e++){if(state[e]!==0)continue;let sc=0;const ca=edgeCellA[e],cb=edgeCellB[e];if(ca>=0&&clue[ca]>=0)sc+=4;if(cb>=0&&clue[cb]>=0)sc+=4;if(vertHasOn(edgeV1[e]))sc+=2;if(vertHasOn(edgeV2[e]))sc+=2;if(sc>bs){bs=sc;best=e;if(sc>=12)break;}}return best;}
-    function dfs(){if(solutions>=limit)return;const e=chooseEdge();if(e===-1)return;
+    function dfs(){if(solutions>=limit||capped)return;if(branchDecisions>cap){capped=true;return;}const e=chooseEdge();if(e===-1)return;
       for(let vi=0;vi<2;vi++){const val=vi===0?1:2;const em=trail.length,um=unionTrail.length,om=onCount;
         gFail=false;gDone=false;branchDecisions++;setEdge(e,val);
-        if(!gFail&&!gDone)propagate();if(!gFail&&!gDone)dfs();clearQueues();undo(em,um,om);if(solutions>=limit)return;}}
-    function count(clueList,lim){limit=lim;state.fill(0);
+        if(!gFail&&!gDone)propagate();if(!gFail&&!gDone)dfs();clearQueues();undo(em,um,om);if(solutions>=limit||capped)return;}}
+    function count(clueList,lim,searchCap){limit=lim;cap=(searchCap==null?Infinity:searchCap);capped=false;state.fill(0);
       for(let i=0;i<NV;i++){parent[i]=i;rank[i]=0;compE[i]=0;}
       clue.fill(-1);for(const q of clueList)clue[q.cell]=q.n;
       trail.length=0;unionTrail.length=0;onCount=0;solutions=0;branchDecisions=0;gFail=false;gDone=false;clearQueues();
       for(const q of clueList)pushCell(q.cell);propagate();
-      if(gFail)return {count:0,branches:branchDecisions};
-      if(!gDone)dfs();return {count:solutions,branches:branchDecisions};}
+      if(gFail)return {count:0,branches:branchDecisions,capped:false};
+      if(!gDone)dfs();return {count:solutions,branches:branchDecisions,capped};}
     return {count};
   }
   let cache={key:'',solver:null};
   function solverFor(R,C){const k=R+'x'+C;if(cache.key!==k){cache={key:k,solver:makeSolver(R,C)};}return cache.solver;}
+
+  // --- "generate to a difficulty": random loop -> clues -> prune; keep ones in the target band ---
+  function randomRegion(R,C){
+    const lo=new Array(R),hi=new Array(R);
+    let plo=Math.floor(Math.random()*C),phi=plo+Math.floor(Math.random()*(C-plo));
+    for(let r=0;r<R;r++){ if(r===0){lo[r]=plo;hi[r]=phi;} else{
+      let nlo=Math.max(0,Math.min(C-1,plo+(Math.floor(Math.random()*5)-2))), nhi=Math.max(nlo,Math.min(C-1,phi+(Math.floor(Math.random()*5)-2)));
+      if(nhi<plo)nhi=plo; if(nlo>phi)nlo=phi; lo[r]=nlo;hi[r]=nhi;plo=nlo;phi=nhi; } }
+    return (r,c)=>c>=lo[r]&&c<=hi[r];
+  }
+  function regionToLoop(R,C,inR){
+    const h=Array.from({length:R+1},()=>new Array(C).fill(false));
+    const v=Array.from({length:R},()=>new Array(C+1).fill(false));
+    const I=(r,c)=>(r>=0&&r<R&&c>=0&&c<C)?inR(r,c):false;
+    for(let r=0;r<=R;r++)for(let c=0;c<C;c++) h[r][c]=I(r-1,c)!==I(r,c);
+    for(let r=0;r<R;r++)for(let c=0;c<=C;c++) v[r][c]=I(r,c-1)!==I(r,c);
+    return {h,v};
+  }
+  function shuf(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+  const GEN_CAP=2000000;
+  function randomLoopPuzzle(R,C,solver,minVisible){
+    const inR=randomRegion(R,C); const {h,v}=regionToLoop(R,C,inR);
+    const full=[]; for(let r=0;r<R;r++)for(let c=0;c<C;c++){ const n=(h[r][c]?1:0)+(h[r+1][c]?1:0)+(v[r][c]?1:0)+(v[r][c+1]?1:0); full.push({cell:r*C+c,n}); }
+    const fr=solver.count(full,2,GEN_CAP); if(fr.capped||fr.count!==1) return null;   // skip degenerate / non-unique loops
+    const visible=new Array(R*C).fill(true); let vis=R*C;
+    for(const cell of shuf(full.map(q=>q.cell))){ if(vis<=minVisible)break; visible[cell]=false;
+      const cl=[]; for(let i=0;i<R*C;i++) if(visible[i]) cl.push(full[i]);
+      const r=solver.count(cl,2,GEN_CAP); if(!r.capped&&r.count===1) vis--; else visible[cell]=true; }
+    const fc=[]; for(let i=0;i<R*C;i++) if(visible[i]) fc.push(full[i]);
+    const r=solver.count(fc,2,GEN_CAP); if(r.capped) return null;
+    return { h, v, full: full.map(q=>q.n), visible, branches:r.branches };
+  }
+  const floorCache={};
+  function generatePuzzle(R,C,band,prog){
+    const solver=solverFor(R,C);
+    if(band==='gentle'){
+      const minVis=Math.round(R*C*0.55);   // leave more clues -> reliably easier
+      for(let t=0;t<80;t++){ const p=randomLoopPuzzle(R,C,solver,minVis); if(p){p.hit=true;return p;} prog(t,80); }
+      return null;
+    }
+    if(band==='fiendish'){
+      let floor=floorCache[R+'x'+C], best=null;
+      if(floor==null){   // calibrate once per grid size: floor = clearly above the typical minimal-prune grind
+        const samp=[];
+        for(let t=0;t<18;t++){ const p=randomLoopPuzzle(R,C,solver,0); if(p){samp.push(p); if(!best||p.branches>best.branches)best=p;} prog(t,98); }
+        samp.sort((a,b)=>a.branches-b.branches);
+        const med=samp.length?samp[Math.floor(samp.length/2)].branches:50;
+        floor=Math.max(30,Math.round(med*1.6)); floorCache[R+'x'+C]=floor;
+        if(best&&best.branches>=floor){best.hit=true;return best;}
+      }
+      for(let t=0;t<80;t++){ const p=randomLoopPuzzle(R,C,solver,0); if(p){ if(p.branches>=floor){p.hit=true;return p;} if(!best||p.branches>best.branches)best=p; } prog(18+t,98); }
+      if(best){best.hit=false;return best;}   // best-effort: hardest we could find
+      return null;
+    }
+    for(let t=0;t<60;t++){ const p=randomLoopPuzzle(R,C,solver,0); if(p){p.hit=true;return p;} prog(t,60); }   // tricky = minimal prune
+    return null;
+  }
 
   onmessage=function(ev){
     const d=ev.data;
@@ -395,6 +466,12 @@
       const finalClues=[];for(let i=0;i<N;i++)if(visible[i])finalClues.push(full[i]);
       const diff=s.count(finalClues,2);
       postMessage({id:d.id,type:'autodone',visible,removed,remaining:finalClues.length,branches:diff.branches});
+    } else if(d.type==='generate'){
+      let last=-99;
+      const prog=(t,total)=>{ if(t-last>=2){ last=t; postMessage({id:d.id,type:'genprogress',frac:Math.min(0.98,t/total)}); } };
+      const res=generatePuzzle(d.R,d.C,d.band,prog);
+      if(!res){ postMessage({id:d.id,type:'genfail'}); return; }
+      postMessage({id:d.id,type:'gendone',h:res.h,v:res.v,full:res.full,visible:res.visible,branches:res.branches,hit:res.hit!==false});
     }
   };
   `;
@@ -742,7 +819,7 @@
   }
 
   /* ---------------- Busy / disable ---------------- */
-  const BTN_IDS = ['newGrid','generate','autoPuzzle','check','playBtn','exportPng','printBtn','saveBtn','loadBtn','clearLoop','clearClues'];
+  const BTN_IDS = ['newGrid','generate','autoPuzzle','check','playBtn','exportPng','printBtn','saveBtn','loadBtn','clearLoop','clearClues','genGentle','genTricky','genFiendish'];
   function setBusy(b){ busy = b; for (const id of BTN_IDS) $(id).disabled = b; refreshUndo(); $('rows').disabled=b; $('cols').disabled=b; }
 
   /* ---------------- Actions ---------------- */
@@ -810,6 +887,44 @@
     p.style.color = g.color; p.style.borderColor = g.color;
   }
   function hideDiff(){ $('diffPill').classList.add('hidden'); }
+
+  /* ---------------- Generate to a difficulty ---------------- */
+  const BAND = {
+    gentle:   { label:'Gentle',   color:'var(--good)',     note:'an easy solve' },
+    tricky:   { label:'Tricky',   color:'var(--warn)',     note:'some real deduction' },
+    fiendish: { label:'Fiendish', color:'var(--bad)',      note:'deep deduction' },
+  };
+  function showBand(band, hit){
+    const g = BAND[band], p = $('diffPill');
+    p.classList.remove('hidden');
+    p.querySelector('.dotk').style.background = g.color;
+    $('diffText').textContent = `Difficulty: ${g.label}${hit ? '' : ' (closest)'} · ${g.note}`;
+    p.style.color = g.color; p.style.borderColor = g.color;
+  }
+  function generateToDifficulty(band){
+    snapshot();   // capture the current board (at its current size) before we change anything
+    R = clamp(+$('rows').value || 6, 2, 18); C = clamp(+$('cols').value || 6, 2, 18);
+    $('rows').value = R; $('cols').value = C;
+    setBusy(true); showProgress(0); hideDiff();
+    setStatus(`Inventing a ${BAND[band].label} ${R}×${C} puzzle…`);
+    ask({type:'generate', R, C, band}, (d) => {
+      if (d.type === 'genprogress'){ showProgress(d.frac); return; }
+      if (d.type === 'genfail'){ setBusy(false); hideProgress(); setStatus('Couldn’t invent a puzzle just then — try again.', 'err'); return; }
+      if (d.type === 'gendone'){
+        hEdges = d.h; vEdges = d.v;
+        fullClues = Array.from({length:R}, (_, r) => Array.from({length:C}, (_, c) => d.full[r*C+c]));
+        visibleClues = Array.from({length:R}, (_, r) => Array.from({length:C}, (_, c) => !!d.visible[r*C+c]));
+        liveNumbers = true;
+        buildBoard();
+        setBusy(false); hideProgress();
+        showBand(band, d.hit);
+        const vis = visibleClues.flat().filter(Boolean).length;
+        setStatus(d.hit
+          ? `Invented a ${BAND[band].label} puzzle — ${vis} clues. Press “Play this puzzle” to solve it.`
+          : `Couldn’t reach ${BAND[band].label} at ${R}×${C} — here’s the trickiest I found (${vis} clues).`, 'ok');
+      }
+    });
+  }
 
   /* ---------------- Progress ---------------- */
   function showProgress(frac){ const p=$('progress'); p.classList.add('show'); p.querySelector('i').style.width = Math.round(frac*100)+'%'; }
@@ -955,6 +1070,9 @@
   $('generate').onclick = () => populateClues();
   $('autoPuzzle').onclick = autoCreate;
   $('check').onclick = checkUnique;
+  $('genGentle').onclick = () => generateToDifficulty('gentle');
+  $('genTricky').onclick = () => generateToDifficulty('tricky');
+  $('genFiendish').onclick = () => generateToDifficulty('fiendish');
   $('playBtn').onclick = openPlayer;
   $('openPlayerBtn').onclick = () => { const w = window.open('play.html', '_blank'); if (!w) setStatus('Your browser blocked the new tab — allow pop-ups.', ''); };
   $('exportPng').onclick = exportPng;
