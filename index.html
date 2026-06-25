@@ -184,9 +184,9 @@
 
     <div class="group" aria-label="Generate to a difficulty">
       <span class="glabel">Generate</span>
-      <button id="genGentle" title="Invent a fresh gentle puzzle">Gentle</button>
-      <button id="genTricky" title="Invent a fresh tricky puzzle">Tricky</button>
-      <button id="genFiendish" title="Invent a fresh fiendish puzzle">Fiendish</button>
+      <button id="genGentle" title="Gentle puzzle — from your drawn loop, or a fresh one if the canvas is empty">Gentle</button>
+      <button id="genTricky" title="Tricky puzzle — from your drawn loop, or a fresh one if the canvas is empty">Tricky</button>
+      <button id="genFiendish" title="Fiendish puzzle — from your drawn loop, or a fresh one if the canvas is empty">Fiendish</button>
     </div>
 
     <div class="group" aria-label="Verify">
@@ -227,7 +227,7 @@
     <b>Click an edge</b> to toggle it on or off — or <b>drag</b> to draw a line, scrubbing back over it to lift it.
     The loop can’t fork — each dot joins at most two lines. Build one single closed loop, then press <b>Create unique puzzle</b>: it fills every clue, then quietly removes as many as it can while the puzzle still has exactly one solution.
     After that, <b>click any number</b> to hide or restore it — the difficulty re-reads as you go. Numbers track the loop live if you redraw it. <kbd>⌘Z</kbd> undoes, <kbd>⇧⌘Z</kbd> redoes.
-    Or skip drawing altogether: the <b>Generate</b> buttons invent a fresh puzzle at roughly the difficulty you pick.
+    The <b>Generate</b> buttons set a difficulty: with a loop drawn they build it from your loop (a simple loop only gets so hard); with an empty canvas they invent a fresh one.
   </p>
 
   <!-- Print target -->
@@ -246,6 +246,12 @@
       <h3>How it's made</h3>
       <p>It's a single HTML file — no install, no account, nothing leaves your machine. The grid is SVG; the hard part, checking that a set of clues has exactly one solution, runs in a background worker so the interface never freezes. That solver does proper Slitherlink deduction (forced edges, vertex parity, no premature little loops) rather than blind trial and error, which is why a 6×6 now takes a few milliseconds instead of the best part of an hour.</p>
       <h3>The diary</h3>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
+        <h4>Set the difficulty of your own loop</h4>
+        <p>The difficulty buttons now read the room: draw a loop and they build a puzzle <i>from your loop</i> at the chosen difficulty, keeping your shape; leave the canvas empty and they invent a fresh one. The honest catch — which the tool now says out loud — is that the loop sets a ceiling: a simple shape can be made easier but won’t reach Fiendish however hard you prune it, so it tells you when your loop “plays gently” and nudges you to draw something twistier. And it won’t throw your drawing away: an unfinished, not-yet-closed loop gets a polite “fix it first” rather than being silently replaced.</p>
+      </div>
 
       <div class="entry">
         <div class="date">23 June 2026</div>
@@ -517,7 +523,13 @@
       const prog=(t,total)=>{ if(t-last>=2){ last=t; postMessage({id:d.id,type:'genprogress',frac:Math.min(0.98,t/total)}); } };
       const res=generatePuzzle(d.R,d.C,d.band,prog);
       if(!res){ postMessage({id:d.id,type:'genfail'}); return; }
-      postMessage({id:d.id,type:'gendone',h:res.h,v:res.v,full:res.full,visible:res.visible,branches:res.branches,hit:res.hit!==false});
+      postMessage({id:d.id,type:'gendone',h:res.h,v:res.v,full:res.full,visible:res.visible,branches:res.branches,hit:res.hit!==false,fromLoop:false});
+    } else if(d.type==='genFromLoop'){
+      const solver=solverFor(d.R,d.C);
+      const minVis=Math.max(1,Math.round(d.R*d.C*keepFor(d.band,d.R,d.C)));
+      const p=puzzleFromLoop(d.R,d.C,solver,d.h,d.v,minVis);   // prune the user's fixed loop to the band's clue density
+      if(!p){ postMessage({id:d.id,type:'genfail',reason:'loop'}); return; }
+      postMessage({id:d.id,type:'gendone',h:p.h,v:p.v,full:p.full,visible:p.visible,branches:p.branches,hit:true,fromLoop:true,clues:p.visible.filter(Boolean).length});
     }
   };
   `;
@@ -947,15 +959,27 @@
     $('diffText').textContent = `Difficulty: ${g.label}${hit ? '' : ' (closest)'} · ${g.note}`;
     p.style.color = g.color; p.style.borderColor = g.color;
   }
+  function loopHasEdges(){ return hEdges.some(r=>r.some(Boolean)) || vEdges.some(r=>r.some(Boolean)); }
   function generateToDifficulty(band){
-    snapshot();   // capture the current board (at its current size) before we change anything
-    R = clamp(+$('rows').value || 6, 2, 18); C = clamp(+$('cols').value || 6, 2, 18);
-    $('rows').value = R; $('cols').value = C;
+    const fromLoop = loopHasEdges();
+    if (fromLoop && !drawnLoopIsSingleLoop()){
+      setStatus('Your drawing isn’t one single closed loop yet — fix it, or Clear loop to invent a fresh puzzle.', 'err');
+      return;
+    }
+    snapshot();   // capture the current board before we change anything
+    if (!fromLoop){ R = clamp(+$('rows').value || 6, 2, 18); C = clamp(+$('cols').value || 6, 2, 18); $('rows').value = R; $('cols').value = C; }
     setBusy(true); showProgress(0); hideDiff();
-    setStatus(`Inventing a ${BAND[band].label} ${R}×${C} puzzle…`);
-    ask({type:'generate', R, C, band}, (d) => {
+    setStatus(fromLoop ? `Setting your loop to ${BAND[band].label}…` : `Inventing a ${BAND[band].label} ${R}×${C} puzzle…`);
+    const msg = fromLoop ? {type:'genFromLoop', R, C, band, h:hEdges, v:vEdges} : {type:'generate', R, C, band};
+    ask(msg, (d) => {
       if (d.type === 'genprogress'){ showProgress(d.frac); return; }
-      if (d.type === 'genfail'){ setBusy(false); hideProgress(); setStatus('Couldn’t invent a puzzle just then — try again.', 'err'); return; }
+      if (d.type === 'genfail'){
+        setBusy(false); hideProgress();
+        setStatus(d.reason === 'loop'
+          ? 'This loop can’t be pinned to a single solution, so I can’t build a puzzle from it.'
+          : 'Couldn’t invent a puzzle just then — try again.', 'err');
+        return;
+      }
       if (d.type === 'gendone'){
         hEdges = d.h; vEdges = d.v;
         fullClues = Array.from({length:R}, (_, r) => Array.from({length:C}, (_, c) => d.full[r*C+c]));
@@ -965,9 +989,17 @@
         setBusy(false); hideProgress();
         showBand(band, d.hit);
         const vis = visibleClues.flat().filter(Boolean).length;
-        setStatus(d.hit
-          ? `Invented a ${BAND[band].label} puzzle — ${vis} clues. Press “Play this puzzle” to solve it.`
-          : `Couldn’t reach ${BAND[band].label} at ${R}×${C} — here’s the trickiest I found (${vis} clues).`, 'ok');
+        // honest nudge: a simple loop pruned to a hard band can still play easy
+        const playsGently = (band !== 'gentle') && (d.branches < 30 + R*C*0.8);
+        if (d.fromLoop){
+          setStatus(playsGently
+            ? `From your loop — ${vis} clues, but it plays gently. A twistier loop reaches ${BAND[band].label}.`
+            : `From your loop — ${BAND[band].label}, ${vis} clues. Press “Play this puzzle” to solve it.`, 'ok');
+        } else {
+          setStatus(d.hit
+            ? `Invented a ${BAND[band].label} puzzle — ${vis} clues. Press “Play this puzzle” to solve it.`
+            : `Couldn’t reach ${BAND[band].label} at ${R}×${C} — here’s the trickiest I found (${vis} clues).`, 'ok');
+        }
       }
     });
   }
