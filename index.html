@@ -249,6 +249,12 @@
 
       <div class="entry">
         <div class="date">23 June 2026</div>
+        <h4>Loops that actually wind</h4>
+        <p>Alan’s next note: the invented loops enclosed a big solid middle, so the line only ran round the rim — less interesting than one that threads through the grid. His suggested rule (ban any empty 4-dot square) would have over-corrected, since empty space <i>outside</i> the loop is normal; what you really want is no big solid area <i>inside</i>. So the generator was rebuilt: instead of carving a loop out of a full grid, it now grows a thin region outward from the centre, steering toward whichever corner it hasn’t reached and refusing to ever fill a solid 3×3 block. The upshot is a loop that spans the grid <i>and</i> winds through the middle, with no empty core — proven across thousands of test grids — and it generates faster than the old approach.</p>
+      </div>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
         <h4>Set the difficulty of your own loop</h4>
         <p>The difficulty buttons now read the room: draw a loop and they build a puzzle <i>from your loop</i> at the chosen difficulty, keeping your shape; leave the canvas empty and they invent a fresh one. The honest catch — which the tool now says out loud — is that the loop sets a ceiling: a simple shape can be made easier but won’t reach Fiendish however hard you prune it, so it tells you when your loop “plays gently” and nudges you to draw something twistier. And it won’t throw your drawing away: an unfinished, not-yet-closed loop gets a polite “fix it first” rather than being silently replaced.</p>
       </div>
@@ -396,19 +402,9 @@
 
   // --- "generate to a difficulty": spanning loop -> clues -> prune; keep ones in the target band ---
   function shuf(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
-  const GEN_CAP=20000;   // a clue is only removed if uniqueness re-verifies within this many steps (keeps it fast + bounds hardness)
+  const GEN_CAP=6000;    // a clue is only removed if uniqueness re-verifies within this many steps (keeps it fast + caps hardness at a humane level)
   const N4=[[1,0],[-1,0],[0,1],[0,-1]];
 
-  function regionConnected(inR,R,C,count){
-    let sr=-1,sc=-1;
-    for(let r=0;r<R&&sr<0;r++)for(let c=0;c<C;c++){ if(inR[r][c]){sr=r;sc=c;break;} }
-    if(sr<0) return false;
-    const seen=Array.from({length:R},()=>new Uint8Array(C));
-    const st=[[sr,sc]]; seen[sr][sc]=1; let n=0;
-    while(st.length){ const a=st.pop(),r=a[0],c=a[1]; n++;
-      for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr>=0&&nr<R&&nc>=0&&nc<C&&inR[nr][nc]&&!seen[nr][nc]){seen[nr][nc]=1;st.push([nr,nc]);} } }
-    return n===count;
-  }
   function holeFree(inR,R,C){   // every non-region cell must reach the grid border through non-region cells
     const seen=Array.from({length:R},()=>new Uint8Array(C)); const st=[];
     for(let r=0;r<R;r++)for(let c=0;c<C;c++){ if((r===0||r===R-1||c===0||c===C-1)&&!inR[r][c]&&!seen[r][c]){seen[r][c]=1;st.push([r,c]);} }
@@ -424,20 +420,36 @@
       if(!ok) return false; }
     return true;
   }
-  // Erode a full grid down to a target fill, keeping it connected and hole-free. Lower fill = more
-  // winding loop = harder; higher fill = smoother = easier. The boundary is one simply-closed loop.
-  function spanningRegion(R,C,fillTarget){
-    const inR=Array.from({length:R},()=>new Uint8Array(C).fill(1));
-    let count=R*C; const target=Math.max(4,Math.floor(fillTarget*R*C)); let guard=R*C*10;
-    while(count>target && guard-->0){
-      const r=Math.floor(Math.random()*R), c=Math.floor(Math.random()*C);
-      if(!inR[r][c]) continue;
-      let bnd=(r===0||r===R-1||c===0||c===C-1);
-      if(!bnd){ for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr>=0&&nr<R&&nc>=0&&nc<C&&!inR[nr][nc]){bnd=true;break;} } }
-      if(!bnd) continue;
-      inR[r][c]=0;
-      if(count-1>=4 && regionConnected(inR,R,C,count-1) && holeFree(inR,R,C)) count--;
-      else inR[r][c]=1;
+  // Would adding (r,c) complete a solid 3x3 block? Forbidding that keeps the region thin, so the loop
+  // winds through the grid with no big empty interior (Alan's note).
+  function creates3x3(inR,r,c,R,C){
+    for(let br=r-2;br<=r;br++)for(let bc=c-2;bc<=c;bc++){
+      if(br<0||bc<0||br+2>=R||bc+2>=C) continue;
+      let all=true; for(let dr=0;dr<3&&all;dr++)for(let dc=0;dc<3;dc++) if(!inR[br+dr][bc+dc]){all=false;break;}
+      if(all) return true;
+    }
+    return false;
+  }
+  // Grow a thin, winding region from the centre, steering toward whichever corner it hasn't reached yet.
+  // No solid 3x3 block (no big empty middle) and hole-free => its boundary is one spanning, winding loop.
+  function grownSpanning(R,C,fillTarget){
+    const inR=Array.from({length:R},()=>new Uint8Array(C));
+    inR[Math.floor(R/2)][Math.floor(C/2)]=1; let count=1;
+    const corners=[[0,0],[0,C-1],[R-1,0],[R-1,C-1]];
+    const reached=(cc)=>{ const r0=cc[0]===0?0:R-2,r1=cc[0]===0?1:R-1,c0=cc[1]===0?0:C-2,c1=cc[1]===0?1:C-1;
+      for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++) if(inR[r][c]) return true; return false; };
+    const target=Math.max(4,Math.floor(fillTarget*R*C)); let guard=R*C*50;
+    while(count<target && guard-->0){
+      let tgt=null; for(const cc of corners) if(!reached(cc)){ tgt=cc; break; }
+      let best=null, bs=1e9;
+      for(let r=0;r<R;r++)for(let c=0;c<C;c++){ if(!inR[r][c]) continue;
+        for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr<0||nr>=R||nc<0||nc>=C||inR[nr][nc]) continue;
+          const score=tgt?(Math.abs(nr-tgt[0])+Math.abs(nc-tgt[1])+Math.random()*1.5):Math.random();
+          if(score<bs){ bs=score; best=[nr,nc]; } } }
+      if(!best) break;
+      inR[best[0]][best[1]]=1;
+      if(creates3x3(inR,best[0],best[1],R,C) || !holeFree(inR,R,C)){ inR[best[0]][best[1]]=0; continue; }
+      count++;
     }
     return inR;
   }
@@ -462,13 +474,14 @@
     return { h, v, full: full.map(q=>q.n), visible, branches:r.branches };
   }
   function randomLoopPuzzle(R,C,solver,minVisible,fillTarget){
-    const inR=spanningRegion(R,C,fillTarget);
+    const inR=grownSpanning(R,C,fillTarget);
     if(!spansCorners(inR,R,C)) return null;
     const {h,v}=regionToLoop(R,C,inR);
     return puzzleFromLoop(R,C,solver,h,v,minVisible);
   }
-  // A nicely-spanning winding loop for any band; difficulty is set by clue density, not loop shape.
-  function fillFor(R,C){ const N=Math.max(R,C); return Math.min(0.78, 0.52 + Math.max(0,N-6)*0.02); }
+  // How much of the grid the grown region covers — ~0.46 gives a pleasantly thin, winding loop.
+  // Loop shape no longer sets difficulty (clue density does), so this is purely for looks.
+  function fillFor(R,C){ return 0.46; }
   // Difficulty = how many clues we leave in. Fewer clues = harder. Fast and reliable; GEN_CAP bounds
   // how hard a sparse puzzle is allowed to get (a removal that takes too long to verify is kept).
   // Base clue-keep fractions; on bigger grids leave relatively more clues (very sparse big grids are
