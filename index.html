@@ -249,6 +249,12 @@
 
       <div class="entry">
         <div class="date">23 June 2026</div>
+        <h4>Fiendish fills the grid</h4>
+        <p>Alan’s next note: on bigger grids the loop left a dead patch of empty space — a 14×14 with a quarter of it blank might as well be a smaller grid. Fixing it turned out to expose a genuine trade-off rather than a bug. The empty space is <i>load-bearing</i>: it’s the trivial part that lets a big puzzle still be solvable as “gentle”. Fill the whole grid and every cell needs real deduction — so a fully-covered 14×14 is <i>always</i> hard, and the easy and medium bands simply vanish. You can have even coverage or a true easy mode on a big grid, not both. The resolution: let the difficulty itself decide. <b>Fiendish</b> now steers its loop to fill the whole grid (it’s meant to be the dense, intricate showpiece anyway), while <b>Gentle</b> and <b>Tricky</b> stay light and may leave open space on large grids — which is exactly right for an easier puzzle. Hard puzzles look full; easy puzzles breathe.</p>
+      </div>
+
+      <div class="entry">
+        <div class="date">23 June 2026</div>
         <h4>Loops that actually wind</h4>
         <p>Alan’s next note: the invented loops enclosed a big solid middle, so the line only ran round the rim — less interesting than one that threads through the grid. His suggested rule (ban any empty 4-dot square) would have over-corrected, since empty space <i>outside</i> the loop is normal; what you really want is no big solid area <i>inside</i>. So the generator was rebuilt: instead of carving a loop out of a full grid, it now grows the <i>inside</i> of the loop outward from the centre, steering toward whichever corner it hasn’t reached yet and never letting that interior thicken into a solid 3×3 patch of cells — which is exactly what a dead, empty middle is. Keeping the inside that thin forces the loop to keep doubling back on itself. The upshot is a loop that spans the grid <i>and</i> threads through the middle, with no empty core — proven across thousands of test grids — and it generates faster than the old approach.</p>
       </div>
@@ -430,17 +436,34 @@
     }
     return false;
   }
-  // Grow a thin, winding region from the centre, steering toward whichever corner it hasn't reached yet.
-  // No solid 3x3 block (no big empty middle) and hole-free => its boundary is one spanning, winding loop.
-  function grownSpanning(R,C,fillTarget){
+  // Cell furthest from the region (centre of the biggest gap) — so growth can fill it in.
+  function biggestGap(inR,R,C){
+    const dist=Array.from({length:R},()=>new Int32Array(C).fill(-1)); const q=[];
+    for(let r=0;r<R;r++)for(let c=0;c<C;c++) if(inR[r][c]){ dist[r][c]=0; q.push([r,c]); }
+    let head=0,best=null,bd=-1;
+    while(head<q.length){ const a=q[head++],r=a[0],c=a[1];
+      for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr>=0&&nr<R&&nc>=0&&nc<C&&dist[nr][nc]<0){ dist[nr][nc]=dist[r][c]+1; if(dist[nr][nc]>bd){bd=dist[nr][nc];best=[nr,nc];} q.push([nr,nc]); } } }
+    return best;
+  }
+  // Largest square that is entirely region OR entirely outside — a loop-free "wasteland".
+  function maxSameSquare(inR,R,C){
+    function largest(val){ const dp=Array.from({length:R},()=>new Int32Array(C)); let m=0;
+      for(let r=0;r<R;r++)for(let c=0;c<C;c++){ if((inR[r][c]?1:0)===val){ dp[r][c]=(r===0||c===0)?1:1+Math.min(dp[r-1][c],dp[r][c-1],dp[r-1][c-1]); if(dp[r][c]>m)m=dp[r][c]; } } return m; }
+    return Math.max(largest(1),largest(0));
+  }
+  // Grow a thin, winding region from the centre, steering toward whichever corner it hasn't reached.
+  // With gapSteer on, once the corners are reached it keeps heading for the biggest remaining gap, so
+  // the loop fills the whole grid (used for Fiendish). No solid 3x3 block + hole-free => one winding loop.
+  function grownSpanning(R,C,fillTarget,gapSteer){
     const inR=Array.from({length:R},()=>new Uint8Array(C));
     inR[Math.floor(R/2)][Math.floor(C/2)]=1; let count=1;
     const corners=[[0,0],[0,C-1],[R-1,0],[R-1,C-1]];
     const reached=(cc)=>{ const r0=cc[0]===0?0:R-2,r1=cc[0]===0?1:R-1,c0=cc[1]===0?0:C-2,c1=cc[1]===0?1:C-1;
       for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++) if(inR[r][c]) return true; return false; };
-    const target=Math.max(4,Math.floor(fillTarget*R*C)); let guard=R*C*50;
+    const target=Math.max(4,Math.floor(fillTarget*R*C)); let guard=R*C*50; let gapTgt=null, recount=0;
     while(count<target && guard-->0){
       let tgt=null; for(const cc of corners) if(!reached(cc)){ tgt=cc; break; }
+      if(!tgt && gapSteer){ if(recount<=0){ gapTgt=biggestGap(inR,R,C); recount=3; } recount--; tgt=gapTgt; }
       let best=null, bs=1e9;
       for(let r=0;r<R;r++)for(let c=0;c<C;c++){ if(!inR[r][c]) continue;
         for(const d of N4){ const nr=r+d[0],nc=c+d[1]; if(nr<0||nr>=R||nc<0||nc>=C||inR[nr][nc]) continue;
@@ -473,15 +496,16 @@
     const r=solver.count(fc,2,GEN_CAP); if(r.capped) return null;
     return { h, v, full: full.map(q=>q.n), visible, branches:r.branches };
   }
-  function randomLoopPuzzle(R,C,solver,minVisible,fillTarget){
-    const inR=grownSpanning(R,C,fillTarget);
+  function randomLoopPuzzle(R,C,solver,minVisible,fillTarget,covered){
+    const inR=grownSpanning(R,C,fillTarget,covered);
     if(!spansCorners(inR,R,C)) return null;
+    if(covered && maxSameSquare(inR,R,C) >= 5) return null;   // Fiendish: never ship a 5x5+ wasteland
     const {h,v}=regionToLoop(R,C,inR);
     return puzzleFromLoop(R,C,solver,h,v,minVisible);
   }
-  // How much of the grid the grown region covers — ~0.46 gives a pleasantly thin, winding loop.
-  // Loop shape no longer sets difficulty (clue density does), so this is purely for looks.
-  function fillFor(R,C){ return 0.46; }
+  // Loop coverage. Gentle/Tricky use a thin ~0.46 loop (fast, smooth difficulty); Fiendish fills the
+  // grid (~0.55 + gap-steering) — denser and harder, but it's the intricate showpiece anyway.
+  function coverFor(band){ return band==='fiendish' ? { fill:0.55, covered:true } : { fill:0.46, covered:false }; }
   // Difficulty = how many clues we leave in. Fewer clues = harder. Fast and reliable; GEN_CAP bounds
   // how hard a sparse puzzle is allowed to get (a removal that takes too long to verify is kept).
   // Base clue-keep fractions; on bigger grids leave relatively more clues (very sparse big grids are
@@ -493,11 +517,11 @@
     return Math.min(0.48, 0.28+bump);                      // fiendish
   }
   function generatePuzzle(R,C,band,prog){
-    const solver=solverFor(R,C), fill=fillFor(R,C);
+    const solver=solverFor(R,C), cov=coverFor(band);
     const minVis=Math.max(1, Math.round(R*C*keepFor(band,R,C)));
     let best=null;
     for(let t=0;t<60;t++){
-      const p=randomLoopPuzzle(R,C,solver,minVis,fill);
+      const p=randomLoopPuzzle(R,C,solver,minVis,cov.fill,cov.covered);
       if(p){ p.hit=true; return p; }
       prog(t,60);
     }
